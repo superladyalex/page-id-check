@@ -4,7 +4,7 @@ This is the current end-to-end behavior of the tool.
 
 ## 1. Start in `src/index.ts`
 
-The CLI starts in [`src/index.ts`](/Users/alexandra/repos/page-id-check/src/index.ts).
+The CLI starts in [`src/index.ts`](src/index.ts).
 
 It:
 
@@ -16,14 +16,9 @@ It:
 6. prints a report
 7. exits with `0` or `1`
 
-The current config points at the sample app repository in [`src/config.ts`](/Users/alexandra/repos/page-id-check/src/config.ts).
-
 ## 2. Discover pages
 
-[`src/discover.ts`](/Users/alexandra/repos/page-id-check/src/discover.ts) uses `fast-glob` to find files matching:
-
-- `src/pages/**/*.tsx`
-- `src/screens/**/*.tsx`
+[`src/discover.ts`](src/discover.ts) uses `fast-glob` to find files matching the config `pages` section
 
 The search is rooted at `repoRoot`, and the global exclude patterns are applied during discovery.
 
@@ -31,7 +26,7 @@ If nothing matches, the CLI prints a warning and exits successfully with code `0
 
 ## 3. Build the page scope
 
-[`src/buildPageAnalysis.ts`](/Users/alexandra/repos/page-id-check/src/buildPageAnalysis.ts) is the important part.
+[`src/buildPageAnalysis.ts`](src/buildPageAnalysis.ts) is the important part.
 
 The analyzer does not just inspect a file in isolation. It tries to reconstruct the JSX render tree for that page.
 
@@ -59,11 +54,11 @@ export default function Page() {
 }
 ```
 
-If `SearchResults` is imported but not rendered, it should not be part of the page scope.
+If `SearchResults` is imported but not rendered, it should NOT be part of the page scope.
 
 ## 4. Parse a single file
 
-[`src/parser.ts`](/Users/alexandra/repos/page-id-check/src/parser.ts) reads one TSX file and extracts:
+[`src/parser.ts`](src/parser.ts) reads one TSX file and extracts:
 
 - JSX attributes
 - import declarations
@@ -71,7 +66,7 @@ If `SearchResults` is imported but not rendered, it should not be part of the pa
 
 ### JSX attributes
 
-It records attributes like `id` and `data-testid` from every JSX element.
+It records attributes defined in `duplicateAttributes` from every JSX element.
 
 Example:
 
@@ -105,7 +100,7 @@ The parser also records imports so the traversal can map JSX usage back to sourc
 
 ## 5. Resolve imports
 
-[`src/resolveImport.ts`](/Users/alexandra/repos/page-id-check/src/resolveImport.ts) handles relative imports like:
+[`src/resolveImport.ts`](src/resolveImport.ts) handles relative imports like:
 
 ```tsx
 import Button from "./Button";
@@ -117,11 +112,11 @@ It tries common React file layouts:
 - direct `.ts` / `.tsx` / `.js` / `.jsx` files
 - `index.ts` / `index.tsx` barrel files
 
-It does not resolve package imports or TypeScript path aliases.
+It does NOT resolve package imports or TypeScript path aliases.
 
 ## 6. Resolve barrels
 
-[`src/resolveExport.ts`](/Users/alexandra/repos/page-id-check/src/resolveExport.ts) follows re-exports like:
+[`src/resolveExport.ts`](src/resolveExport.ts) follows re-exports like:
 
 ```ts
 export { Button } from "./Button";
@@ -149,7 +144,7 @@ That means Button is part of the page three times, so its DOM attributes should 
 
 ## 8. Validate duplicates
 
-[`src/validator.ts`](/Users/alexandra/repos/page-id-check/src/validator.ts) only checks configured attributes:
+[`src/validator.ts`](src/validator.ts) only checks configured attributes:
 
 - `id`
 - `data-testid`
@@ -162,7 +157,7 @@ It:
 
 ## 9. Print the report
 
-[`src/index.ts`](/Users/alexandra/repos/page-id-check/src/index.ts) prints:
+[`src/index.ts`](src/index.ts) prints:
 
 - the page
 - the attribute name
@@ -180,6 +175,9 @@ Example:
 2. components/ui/Button.tsx:18:7 via pages/ComponentReusePage.tsx:14:9
 3. components/ui/Button.tsx:18:7 via pages/ComponentReusePage.tsx:16:9
 ```
+
+
+
 
 ## Regression page
 

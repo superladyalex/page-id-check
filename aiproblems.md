@@ -576,3 +576,56 @@ So the final report becomes clearer:
 That is the same duplicate, but presented in a way that reflects how many times
 the component was actually rendered without pretending there are three separate
 source locations.
+
+
+
+---
+
+# Regression Example
+
+The sample app now includes a page specifically for the old false-positive case:
+
+[`src/pages/ImportedButUnusedPage.tsx`](/Users/alexandra/repos/sample-app-for-page-id-check/src/pages/ImportedButUnusedPage.tsx)
+
+That page imports `SearchResults`, but does not render it.
+
+```tsx
+import Layout from "../components/layout/Layout";
+import SearchBox from "../components/ui/SearchBox";
+import SearchResults from "../components/ui/SearchResults";
+
+export default function ImportedButUnusedPage() {
+  return (
+    <Layout>
+      <SearchBox />
+    </Layout>
+  );
+}
+```
+
+Why this matters:
+
+- `SearchBox` renders `data-testid="search-input"`.
+- `SearchResults` also renders `data-testid="search-input"`.
+- A static import walk would visit both components and incorrectly report a duplicate.
+- A JSX-tree walk should ignore `SearchResults` because it is imported but not rendered.
+
+That page is the concrete regression test for the traversal behavior.
+
+There is also a conditional-branch example:
+
+[`src/pages/ConditionalBranchPage.tsx`](/Users/alexandra/repos/sample-app-for-page-id-check/src/pages/ConditionalBranchPage.tsx)
+
+That page picks one branch at runtime, but the source contains both JSX branches:
+
+```tsx
+{usePrimaryAction ? (
+  <ConditionalPrimaryButton />
+) : (
+  <ConditionalSecondaryButton />
+)}
+```
+
+Both branches are included in static analysis, which is exactly what you want when you need to reason about the full JSX tree instead of only the current browser DOM.
+
+---

@@ -1,0 +1,65 @@
+.idea
+# =========================
+# Dependencies
+# =========================
+node_modules/
+.pnp/
+.pnp.js
+.yarn/*
+!.yarn/releases
+!.yarn/plugins
+!.yarn/sdks
+!.yarn/versions
+
+# Yarn Integrity
+.yarn-integrity
+
+# =========================
+# Build output
+# =========================
+dist/
+build/
+out/
+coverage/
+
+# TypeScript cache
+*.tsbuildinfo
+
+# =========================
+# Logs
+# =========================
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# =========================
+# Environment variables
+# =========================
+.env
+.env.local
+.env.*.local
+
+# =========================
+# WebStorm / JetBrains
+# =========================
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+
+# =========================
+# OS files
+# =========================
+.DS_Store
+Thumbs.db
+
+# =========================
+# Optional caches
+# =========================
+.eslintcache
+.prettiercache
+.cache/
+dist-check/

@@ -88,22 +88,20 @@ export function analyzeTsxFile(filePath: string): FileAnalysis {
     };
   });
 
-  const seen = new Set<string>();
-
-  const rawUsages = [
+  const componentUsages: ComponentUsage[] = [
     ...sourceFile.getDescendantsOfKind(SyntaxKind.JsxSelfClosingElement),
     ...sourceFile.getDescendantsOfKind(SyntaxKind.JsxOpeningElement),
   ]
-    .map((el: any) => ({ name: el.getTagNameNode().getText() }))
+    .map((el: any) => {
+      const pos = sourceFile.getLineAndColumnAtPos(el.getStart());
+
+      return {
+        name: el.getTagNameNode().getText(),
+        line: pos.line,
+        column: pos.column,
+      };
+    })
     .filter((u) => isComponentTag(u.name));
-
-  const componentUsages: ComponentUsage[] = [];
-
-  for (const usage of rawUsages) {
-    if (seen.has(usage.name)) continue;
-    seen.add(usage.name);
-    componentUsages.push(usage);
-  }
 
   return {
     file: filePath,

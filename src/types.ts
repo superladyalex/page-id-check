@@ -4,6 +4,7 @@ export interface DomAttribute {
   value: string | null;
   line: number;
   column: number;
+  renderPath: RenderStep[];
 }
 
 export interface FileAnalysis {
@@ -22,6 +23,15 @@ export interface ImportInfo {
 }
 
 export interface ComponentUsage {
+  name: string;
+  line: number;
+  column: number;
+}
+
+export interface RenderStep {
+  file: string;
+  line: number;
+  column: number;
   name: string;
 }
 

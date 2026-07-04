@@ -1,8 +1,8 @@
 # Page ID Check
 
-Page ID Check is a static analysis tool for React/TSX codebases. It starts from configured page entry files, walks the file graph through static imports and barrel re-exports, collects DOM attributes from every reachable file, and reports duplicate configured attributes such as `id` and `data-testid`.
+Page ID Check is a static analysis tool for React/TSX codebases. It starts from configured page entry files, follows the JSX render tree, resolves the imported components that appear in that tree, and reports duplicate configured DOM attributes such as `id` and `data-testid`.
 
-The analyzer is static only. It does not run the app, render components, or evaluate runtime conditions.
+The analyzer is static only. It does not run the app or simulate runtime rendering.
 
 ---
 
@@ -10,7 +10,7 @@ The analyzer is static only. It does not run the app, render components, or eval
 
 ## 1. Configuration
 
-The CLI reads the configuration from [`src/config.ts`](/Users/alexandra/repos/page-id-check/src/config.ts).
+The CLI reads [`src/config.ts`](/Users/alexandra/repos/page-id-check/src/config.ts).
 
 Current configuration:
 
@@ -23,43 +23,41 @@ export const config = {
 };
 ```
 
-What that means:
+Meaning:
 
 - `repoRoot` points at the sample app repository.
 - `pages` defines the page entry-point globs.
-- `exclude` defines files that should be ignored everywhere in the analysis pipeline.
-- `duplicateAttributes` defines which DOM attributes are checked for duplicates.
+- `exclude` is applied throughout discovery and traversal.
+- `duplicateAttributes` defines which DOM attributes are checked.
 
 ## 2. Page discovery
 
-[`src/discover.ts`](/Users/alexandra/repos/page-id-check/src/discover.ts) uses `fast-glob` to find matching page files under `repoRoot`.
+[`src/discover.ts`](/Users/alexandra/repos/page-id-check/src/discover.ts) uses `fast-glob` to find page files under `repoRoot`.
 
-It returns absolute file paths, so later steps do not need to guess at relative path handling.
+The result is a list of absolute file paths. If nothing matches, the CLI prints a warning and exits with code `0`.
 
-If no pages match, the CLI prints a warning and exits successfully with code `0`.
+## 3. Render-tree traversal
 
-## 3. Page analysis
+[`src/buildPageAnalysis.ts`](/Users/alexandra/repos/page-id-check/src/buildPageAnalysis.ts) builds the page scope.
 
-For each discovered page, [`src/buildPageAnalysis.ts`](/Users/alexandra/repos/page-id-check/src/buildPageAnalysis.ts) builds a flattened page analysis.
+The current traversal is JSX-driven:
 
-The process is:
+1. Parse the page file.
+2. Collect the JSX component usages in that file.
+3. Match those usages to local imports.
+4. Resolve the matching component files.
+5. Follow the component tree recursively.
+6. Repeat the same process for every rendered child component.
 
-1. Normalize the page path.
-2. Skip the file if it matches the exclusion rules.
-3. Parse the file with [`src/parser.ts`](/Users/alexandra/repos/page-id-check/src/parser.ts).
-4. Follow each static import with [`src/resolveImport.ts`](/Users/alexandra/repos/page-id-check/src/resolveImport.ts).
-5. Follow each barrel re-export with [`src/resolveExport.ts`](/Users/alexandra/repos/page-id-check/src/resolveExport.ts).
-6. Repeat recursively until the reachable file set is exhausted.
-7. Collect attributes, imports, and component usages from every visited file.
+Important:
 
-Important detail:
-
-- The traversal currently follows imports and re-exports.
-- JSX component usage is extracted by the parser, but it is not currently used as a traversal signal.
+- Only JSX usages that are actually rendered drive traversal.
+- Imported components that are not rendered are ignored.
+- Repeated JSX tags are counted as repeated instances, not collapsed into one.
 
 ## 4. Parsing
 
-`parser.ts` reads a single TSX file and extracts three things:
+[`src/parser.ts`](/Users/alexandra/repos/page-id-check/src/parser.ts) reads a single TSX file and extracts:
 
 - JSX attributes
 - import declarations
@@ -67,7 +65,7 @@ Important detail:
 
 ### Attribute extraction
 
-The parser walks all `JsxAttribute` nodes and records:
+The parser records:
 
 - file path
 - attribute name
@@ -75,7 +73,7 @@ The parser walks all `JsxAttribute` nodes and records:
 - line number
 - column number
 
-It normalizes string-like JSX initializers so duplicate comparison uses the actual attribute value rather than JSX syntax noise.
+It normalizes string-like JSX initializers so duplicate comparison uses the actual value rather than JSX syntax noise.
 
 Example:
 
@@ -83,39 +81,33 @@ Example:
 <input data-testid={"search-input"} />
 ```
 
-becomes the stored value:
+is normalized to:
 
 ```ts
 search-input
 ```
 
-### Import extraction
-
-The parser records each import declaration, including:
-
-- default imports
-- named imports
-- aliased named imports
-- namespace imports
-
-This data is used by the traversal step to find related files.
-
 ### Component usage extraction
 
-The parser also detects PascalCase JSX tags such as:
+The parser records JSX component tags such as:
 
 ```tsx
 <Button />
+<Forms.ProfileForm />
 <Modal.Header />
 ```
 
-These are collected as component usages, but the current traversal does not act on them directly.
+Those usages are what drive traversal.
+
+### Import extraction
+
+The parser also records import declarations so the traversal can connect component usage back to the actual source file.
 
 ## 5. Import resolution
 
 [`src/resolveImport.ts`](/Users/alexandra/repos/page-id-check/src/resolveImport.ts) resolves relative imports only.
 
-It tries common React/TypeScript file shapes in this order:
+It tries common file layouts in this order:
 
 - `./Button.tsx`
 - `./Button.ts`
@@ -144,13 +136,11 @@ or:
 Button/index.tsx
 ```
 
-Absolute imports and package imports are not resolved by this logic.
+Package imports and TypeScript path aliases are not resolved.
 
 ## 6. Barrel resolution
 
-[`src/resolveExport.ts`](/Users/alexandra/repos/page-id-check/src/resolveExport.ts) looks for barrel-style re-exports in source files.
-
-Supported patterns include:
+[`src/resolveExport.ts`](/Users/alexandra/repos/page-id-check/src/resolveExport.ts) follows barrel files like:
 
 ```ts
 export { Button } from "./Button";
@@ -158,30 +148,23 @@ export { Button, Card } from "./ui";
 export * from "./ui";
 ```
 
-This lets the traversal follow shared index files into their underlying implementation files.
+This lets the JSX tree traversal move through `index.ts` files and still reach the real component implementation files.
 
 ## 7. Validation
 
-[`src/validator.ts`](/Users/alexandra/repos/page-id-check/src/validator.ts) receives the flattened analyses and checks only the configured duplicate attributes.
+[`src/validator.ts`](/Users/alexandra/repos/page-id-check/src/validator.ts) receives the flattened page scope and checks only the configured duplicate attributes.
 
-Current validation targets:
+It:
 
-- `id`
-- `data-testid`
-
-The validator:
-
-1. Ignores attributes with empty values.
+1. Ignores empty values.
 2. Groups attributes by `name + value`.
-3. Reports an issue when the same attribute/value pair appears more than once in a single page.
-
-The current keying strategy uses a delimiter that should not collide with normal attribute values.
+3. Reports a duplicate when the same attribute/value pair appears more than once in the same page scope.
 
 ## 8. Output
 
-[`src/index.ts`](/Users/alexandra/repos/page-id-check/src/index.ts) prints the results.
+[`src/index.ts`](/Users/alexandra/repos/page-id-check/src/index.ts) prints the result.
 
-If duplicates are found, it reports:
+If duplicates are found, it prints:
 
 - page path
 - duplicate attribute name
@@ -190,16 +173,70 @@ If duplicates are found, it reports:
 - file path
 - line
 - column
+- render path back to the JSX call site
 
-If no duplicates are found, the CLI exits with code `0`.
-
+If nothing is duplicated, the CLI exits with code `0`.
 If duplicates are found, the CLI exits with code `1`.
+
+Repeated renders of the same component now show up as separate entries with a
+different render path instead of three identical source lines.
 
 ---
 
-# What The Tool Does Not Do
+# Regression Example
 
-The current implementation intentionally does **not**:
+The sample app now includes a page specifically for the old false-positive case:
+
+[`src/pages/ImportedButUnusedPage.tsx`](/Users/alexandra/repos/sample-app-for-page-id-check/src/pages/ImportedButUnusedPage.tsx)
+
+That page imports `SearchResults`, but does not render it.
+
+```tsx
+import Layout from "../components/layout/Layout";
+import SearchBox from "../components/ui/SearchBox";
+import SearchResults from "../components/ui/SearchResults";
+
+export default function ImportedButUnusedPage() {
+  return (
+    <Layout>
+      <SearchBox />
+    </Layout>
+  );
+}
+```
+
+Why this matters:
+
+- `SearchBox` renders `data-testid="search-input"`.
+- `SearchResults` also renders `data-testid="search-input"`.
+- A static import walk would visit both components and incorrectly report a duplicate.
+- A JSX-tree walk should ignore `SearchResults` because it is imported but not rendered.
+
+That page is the concrete regression test for the traversal behavior.
+
+There is also a conditional-branch example:
+
+[`src/pages/ConditionalBranchPage.tsx`](/Users/alexandra/repos/sample-app-for-page-id-check/src/pages/ConditionalBranchPage.tsx)
+
+That page picks one branch at runtime, but the source contains both JSX branches:
+
+```tsx
+{usePrimaryAction ? (
+  <ConditionalPrimaryButton />
+) : (
+  <ConditionalSecondaryButton />
+)}
+```
+
+Both branches are included in static analysis, which is exactly what you want when you need to reason about the full JSX tree instead of only the current browser DOM.
+
+---
+
+# Current Limitations
+
+The analyzer is deterministic and intentionally narrow.
+
+It does not:
 
 - execute application code
 - simulate runtime rendering
@@ -208,39 +245,3 @@ The current implementation intentionally does **not**:
 - resolve non-relative package imports
 - perform bundler-level module resolution
 - analyze styling or CSS systems
-
----
-
-# Example Mental Model
-
-For a page like:
-
-```tsx
-<>
-  <LoginForm />
-  <Footer />
-</>
-```
-
-if both reachable components render:
-
-```tsx
-<button id="submit-button" />
-```
-
-the analyzer collects both occurrences into the same page scope and reports the duplicate.
-
----
-
-# Current Limitations
-
-The analyzer is deterministic and simple by design, which means it favors clarity over full framework awareness.
-
-It works well for local static component graphs, but it does not currently understand:
-
-- aliases like `@/components/Button`
-- build-time transforms
-- dynamic imports
-- conditionally rendered trees
-- framework-specific routing conventions beyond the configured page globs
-

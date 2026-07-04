@@ -4,9 +4,9 @@ import { normalizePath } from "./normalizePath.js";
 import path from "path";
 
 /** Shared exclusion filter for tests, build output, and dependencies. */
-export function isExcluded(filePath: string): boolean {
+export function isExcluded(filePath: string, repoRoot = config.repoRoot): boolean {
   const normalized = normalizePath(filePath);
-  const relative = path.relative(config.repoRoot, normalized);
+  const relative = path.relative(repoRoot, normalized);
 
   return micromatch.isMatch(relative, config.exclude);
 }

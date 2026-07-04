@@ -1,16 +1,6 @@
 # page-id-check
 
-`page-id-check` is a static analysis CLI for React/TSX codebases. It walks page entry files, follows imports and barrel re-exports, flattens the rendered component tree, and reports duplicate DOM attributes such as `id` and `data-testid`.
-
-## Usage
-
-From the repository root:
-
-```bash
-PAGE_ID_CHECK_ROOT=/path/to/app yarn check
-```
-
-If `PAGE_ID_CHECK_ROOT` is not set, the CLI analyzes the current working directory.
+`page-id-check` is a static analysis CLI for React/TSX codebases. It starts from configured page entry files, follows the JSX render tree, resolves imported components through relative imports and barrels, and reports duplicate DOM attributes such as `id` and `data-testid`.
 
 ## What it checks
 
@@ -19,153 +9,91 @@ If `PAGE_ID_CHECK_ROOT` is not set, the CLI analyzes the current working directo
 - Duplicate `id` attributes
 - Duplicate `data-testid` attributes
 
-It ignores:
+## How it runs
 
-- `node_modules`
-- `dist`
-- `*.test.tsx`
-- `*.spec.tsx`
+The CLI reads [`src/config.ts`](/Users/alexandra/repos/page-id-check/src/config.ts) to determine:
 
-## Development
+- `repoRoot`
+- page discovery globs
+- exclusion rules
+- duplicate attributes to validate
+
+Then it:
+
+1. discovers page entry files
+2. builds a render-tree analysis for each page
+3. validates duplicate attributes in the flattened page scope
+4. prints the duplicate report
+
+## Usage
 
 ```bash
 yarn build
 yarn check
 ```
 
-## Notes
+## Running Locally / Contributing
 
-- The analyzer is file-based and deterministic.
-- It supports relative imports, folder `index.tsx` resolution, named barrel exports, and `export * from` barrels.
-- Attribute values are normalized before validation, so string literals are reported without surrounding quotes.
+1. Install Node.js 20 or higher.
+2. Enable Corepack.
 
+```bash
+corepack enable
+```
 
-1 -# page-id-check
-2 -
-3 -page-id-check is a static analysis tool for React/TSX codebases that bu
-ilds a page-level view of rendered components and detects issues such a
-s duplicate attributes (id, data-testid) across a rendered page.
-4 -
-5 -## Running Locally/Contributing
-6 -1. Node.js (20 or higher)
-7 -2. Enable corepack
-8 -```bash
-      9 -   corepack enable
-     10 -   ```
-11 -3. `cd` into this directory and install dependencies
-12 -```bash
-     13 -   yarn install
-     14 -   ```
-15 -4.  updating config.ts
-16 -
-17 -
-18 -
-19 -## Things AI got wrong
-20 -1)
-21 -disocver.cs
-22 -{
-23 -cwd: root, //search from "this" directory
-24 -absolute: true, originally set this to true with the reasoning that ful
-l paths are easier to work with.
-25 -onlyFiles: true
-26 -}
-27 -Why I disagree:
-28 -They're much cleaner in CLI output.
-29 -They're easier to read in error messages.
-30 -If someone pastes the output into a PR or Slack, it isn't full of machi
-ne-specific paths.
-31 -
-32 -2)
-33 -the original paradigm it suggestd wass firsst find eveyr jsx element an
-d inspect their attributes
-34 -```
-     35 -JSX Element
-     36 -    ↓
-     37 -Attributes
-     38 -        ↓
-     39 -id
-     40 -data-testid
-     41 -```
-42 -In other words:
-43 -
-44 -Find <input />
-45 -Look at its attributes
-46 -Find id
-47 -
-48 -Since we only care about `id` and `data-testid` - we can just find ever
-y JSX attribute instead
-49 -
-50 -so, with this code
-51 -```typescript
-     52 -<div>
-     53 -  <input id="email" />
-     54 -  <button data-testid="submit">
-     55 -    Submit
-     56 -  </button>
-     57 -</div>
-     58 -```
-59 -with the original suggesetsiotn,
-60 -```typescript
-     61 -Find every JSX element
-     62 -
-     63 -↓
-     64 -
-     65 -div
-     66 -input
-     67 -button
-     68 -
-     69 -↓
-     70 -
-     71 -Inspect each one's attributes
-     72 -
-     73 -↓
-     74 -
-     75 -id
-     76 -data-testid
-     77 -```
-78 -
-79 -with my improvement
-80 -```typescript
-     81 -Find every JSX attribute
-     82 -
-     83 -↓
-     84 -
-     85 -id
-     86 -data-testid
-     87 -```
-88 -Since we're not doing answring questions  like - this approach works
-89 -"Which component contains this attribute?"
-90 -"Is this attribute on a DOM element or a React component?"
-91 -"Where is this element in the render tree?"
-92 -
-93 -
-94 -3)
-95 -It originally suggested a Next specific configuration where we'd only l
-ok for pages in app/* and pages/* which raell meant we were building so
-mething coupled to a framework instead of being framework agnosti
-96 -original code in discover.ts suggested
-97 -return fg(
-98 -[
-99 -"app/**/page.tsx",
-100 -"pages/**/*.tsx"
-101 -]
-102 -
-103 -I changed it to a config file that wasn't framework specific and had in
-cludde, exclude logic
-104 -
-105 -4)
-106 -Right now we still assume:
-107 -
-108 -./Button → Button.tsx
-109 -
-110 -But real code has:
-111 -
-112 -./Button/index.ts
-113 -@/components/Button
-114 -re-exports
-115 -barrel files
-116 -
-117 -
-118 -5
-119 -
+3. From this directory, install dependencies.
 
+```bash
+yarn install
+```
+
+After that, the main commands are:
+
+```bash
+yarn build
+yarn check
+yarn test
+```
+
+If Corepack or Yarn fails before the project starts, that usually means the local Node.js install is too old or the package-manager shim is not enabled.
+
+## Sample app
+
+The repo points at the sample app in [`/Users/alexandra/repos/sample-app-for-page-id-check`](/Users/alexandra/repos/sample-app-for-page-id-check).
+
+That sample includes:
+
+- repeated component rendering
+- imported-but-unused components
+- conditional JSX branches
+
+Those cases are used to demonstrate why JSX-tree traversal is more accurate than a browser-only or import-only walk.
+
+The report includes the component source location plus the render path that led to it, so repeated renders are easier to trace back to the page source.
+
+## Test suite
+
+Run the analyzer tests with:
+
+```bash
+yarn test
+```
+
+You can also run the same suite through the regression alias:
+
+```bash
+yarn test:regression
+```
+
+The test suite covers:
+
+- discovery
+- import resolution
+- barrel resolution
+- JSX attribute normalization
+- repeated renders
+- imported-but-unused components
+- conditional JSX branches
+- validation of duplicate outputs
+
+The tests are self-contained unit tests built from temporary fixtures, so they do not depend on the sample app repo.

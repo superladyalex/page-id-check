@@ -1,51 +1,111 @@
 import { analyzeTsxFile } from "./parser.js";
 import { resolveImport } from "./resolveImport.js";
-import { resolveExports } from "./resolveExport.js";
+import { resolveExportTargets } from "./resolveExport.js";
 import { isExcluded } from "./isExcluded.js";
 import { normalizePath } from "./normalizePath.js";
 
 import type { FileAnalysis, DomAttribute } from "./types.js";
+import type { RenderStep } from "./types.js";
 
 export function buildPageAnalysis(entryFile: string): FileAnalysis {
-  const visited = new Set<string>();
-  const analysesByFile = new Map<string, FileAnalysis>();
-
-  function walk(filePath: string) {
-    const id = normalizePath(filePath);
-
-    if (visited.has(id)) return;
-    if (isExcluded(id)) return;
-
-    visited.add(id);
-    const analysis = analyzeTsxFile(id);
-    analysesByFile.set(id, analysis);
-
-    for (const imp of analysis.imports) {
-      const resolved = resolveImport(id, imp.module);
-      if (resolved) {
-        walk(resolved);
-      }
-    }
-
-    for (const exp of resolveExports(id)) {
-      const resolved = resolveImport(id, exp.module);
-      if (resolved) {
-        walk(resolved);
-      }
-    }
-  }
-
-  walk(entryFile);
-
+  const analysisCache = new Map<string, FileAnalysis>();
   const allAttributes: DomAttribute[] = [];
   const allImports: FileAnalysis["imports"] = [];
   const allComponentUsages: FileAnalysis["componentUsages"] = [];
 
-  for (const analysis of analysesByFile.values()) {
-    allAttributes.push(...analysis.attributes);
+  function walk(
+    filePath: string,
+    pathStack: Set<string>,
+    renderPath: RenderStep[]
+  ) {
+    const id = normalizePath(filePath);
+
+    if (isExcluded(id)) return;
+    if (pathStack.has(id)) return;
+
+    const analysis = getAnalysis(id);
+    allAttributes.push(
+      ...analysis.attributes.map((attr) => ({
+        ...attr,
+        renderPath: [...renderPath],
+      }))
+    );
     allImports.push(...analysis.imports);
     allComponentUsages.push(...analysis.componentUsages);
+
+    const nextPathStack = new Set(pathStack);
+    nextPathStack.add(id);
+
+    for (const usage of analysis.componentUsages) {
+      for (const imp of analysis.imports) {
+        const exportName = getExportNameForUsage(imp, usage);
+        if (!exportName) continue;
+
+        const resolved = resolveImport(id, imp.module);
+        if (!resolved) continue;
+
+        const nextRenderPath = [
+          ...renderPath,
+          {
+            file: id,
+            line: usage.line,
+            column: usage.column,
+            name: usage.name,
+          },
+        ];
+
+        const exportTargets = resolveExportTargets(resolved, exportName);
+        if (exportTargets.length === 0) {
+          walk(resolved, nextPathStack, nextRenderPath);
+          continue;
+        }
+
+        for (const exportTarget of exportTargets) {
+          walk(exportTarget, nextPathStack, nextRenderPath);
+        }
+      }
+    }
   }
+
+  function getAnalysis(filePath: string): FileAnalysis {
+    const id = normalizePath(filePath);
+    const cached = analysisCache.get(id);
+
+    if (cached) {
+      return cached;
+    }
+
+    const analysis = analyzeTsxFile(id);
+    analysisCache.set(id, analysis);
+    return analysis;
+  }
+
+  function getExportNameForUsage(
+    imp: FileAnalysis["imports"][number],
+    usage: FileAnalysis["componentUsages"][number]
+  ): string | null {
+    const [usageRoot, usageMember] = usage.name.split(".");
+
+    if (imp.namespaceImport === usageRoot) {
+      return usageMember ?? null;
+    }
+
+    if (imp.defaultImport === usageRoot) {
+      return usageRoot;
+    }
+
+    if (imp.namedImports.includes(usageRoot)) {
+      return imp.namedImportAliases?.[usageRoot] ?? usageRoot;
+    }
+
+    if (imp.namedImportAliases && usageRoot in imp.namedImportAliases) {
+      return imp.namedImportAliases[usageRoot];
+    }
+
+    return null;
+  }
+
+  walk(entryFile, new Set<string>(), []);
 
   return {
     file: entryFile,

@@ -16,7 +16,9 @@
   "scripts": {
     "build": "tsc",
     "check": "tsx src/index.ts",
-    "dev": "tsx src/index.ts"
+    "dev": "tsx src/index.ts",
+    "test": "tsx --test src/tests/*.test.ts",
+    "test:regression": "tsx --test src/tests/*.test.ts"
   },
   "type": "module"
 }

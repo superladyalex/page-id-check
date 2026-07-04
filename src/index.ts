@@ -3,17 +3,16 @@ import { discover } from "./discover.js";
 import { buildPageAnalysis } from "./buildPageAnalysis.js";
 import { validate, type ValidationIssue } from "./validator.js";
 import type { FileAnalysis } from "./types.js";
+import path from "path";
+import { fileURLToPath } from "node:url";
 
-async function main(): Promise<void> {
+export async function main(): Promise<void> {
   const root = config.repoRoot;
 
   console.log("\nPage ID Check\n");
   console.log(`Repository: ${root}`);
 
-  //
-  // Step 1
-  // Discover page entry points
-  //
+  // Step 1 - Discover page entry points
   const pages = await discover(config.pages, root);
 
   if (pages.length === 0) {
@@ -37,10 +36,7 @@ async function main(): Promise<void> {
 
   console.log(`📄 Found ${pages.length} page(s).\n`);
 
-  //
-  // Step 2
-  // Build rendered page analyses
-  //
+  // Step 2 - Build rendered page analyses
   const pageAnalyses: FileAnalysis[] = [];
 
   for (const page of pages) {
@@ -61,36 +57,69 @@ async function main(): Promise<void> {
   process.exit(1);
 }
 
-function printIssues(issues: ValidationIssue[]): void {
-  console.log("\n🚨 Duplicate DOM attributes detected\n");
+export function printIssues(issues: ValidationIssue[]): void {
+  console.log(formatIssueOutput(issues, config.repoRoot));
+}
+
+export function formatIssueOutput(
+  issues: ValidationIssue[],
+  repoRoot: string
+): string {
+  if (issues.length === 0) {
+    return "\n✅ No duplicate DOM attributes found.\n";
+  }
+
+  const lines: string[] = ["\n🚨 Duplicate DOM attributes detected\n"];
 
   for (const issue of issues) {
-    console.log("────────────────────────────────────────");
-    console.log(`Page: ${issue.page}`);
-    console.log(`${issue.attribute}: "${issue.value}"`);
-    console.log("");
+    lines.push("────────────────────────────────────────");
+    lines.push(`Page: ${issue.page}`);
+    lines.push(`${issue.attribute}: "${issue.value}"`);
+    lines.push("");
 
     issue.occurrences.forEach((occurrence, index) => {
-      console.log(
-        `${index + 1}. ${occurrence.file}:${occurrence.line}:${occurrence.column}`
+      const renderPath = formatRenderPath(occurrence.renderPath, repoRoot);
+      const suffix = renderPath ? ` via ${renderPath}` : "";
+      lines.push(
+        `${index + 1}. ${occurrence.file}:${occurrence.line}:${occurrence.column}${suffix}`
       );
     });
 
-    console.log("");
+    lines.push("");
   }
 
-  console.log(`Found ${issues.length} duplicate issue(s).\n`);
+  lines.push(`Found ${issues.length} duplicate issue(s).\n`);
+
+  return lines.join("\n");
 }
 
-main().catch((error) => {
-  console.error("\n❌ Unexpected error\n");
-
-  if (error instanceof Error) {
-    console.error(error.message);
-    console.error(error.stack);
-  } else {
-    console.error(error);
+export function formatRenderPath(
+  renderPath: ValidationIssue["occurrences"][number]["renderPath"],
+  repoRoot: string
+): string {
+  if (renderPath.length === 0) {
+    return "";
   }
 
-  process.exit(1);
-});
+  return renderPath
+    .map(
+      (step) =>
+        `${path.relative(repoRoot, step.file)}:${step.line}:${step.column}`
+    )
+    .join(" -> ");
+}
+
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  void main().catch((error) => {
+    console.error("\n❌ Unexpected error\n");
+
+    if (error instanceof Error) {
+      console.error(error.message);
+      console.error(error.stack);
+    } else {
+      console.error(error);
+    }
+
+    process.exit(1);
+  });
+}

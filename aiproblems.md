@@ -312,3 +312,267 @@ Before:
   analysis once, and then validate the flattened result. That keeps the behavior
   deterministic and avoids extra passes or debug noise that make the tool harder
   to trust.
+
+8)
+The analyzer was following imports and barrels too aggressively instead of
+treating the JSX render tree as the source of truth.
+
+Before, the traversal could look more like this:
+
+```ts
+for (const imp of analysis.imports) {
+  const resolved = resolveImport(filePath, imp.module);
+  if (resolved) {
+    walk(resolved);
+  }
+}
+```
+
+That is useful for finding related files, but it is not enough to describe what
+is actually rendered. A file can be imported and still never appear in the page:
+
+```tsx
+import SearchResults from "../components/ui/SearchResults";
+
+export default function Page() {
+  return <SearchBox />;
+}
+```
+
+In that case, a browser-extension style approach would only see the current DOM
+and a file-graph-only approach would still drag `SearchResults` into the page
+scope. The JSX-tree approach is stricter: it only follows what is actually
+rendered from the source tree.
+
+After the fix, traversal starts from the JSX usage and then resolves only the
+component that the JSX actually points to.
+
+9)
+Repeated JSX renders were being collapsed instead of counted as separate
+occurrences.
+
+This matters because a page can render the same component several times and each
+render should contribute its DOM attributes to the page scope.
+
+Example:
+
+```tsx
+export default function ComponentReusePage() {
+  return (
+    <>
+      <Button />
+      <Button />
+      <Button />
+    </>
+  );
+}
+```
+
+If `Button` renders this:
+
+```tsx
+export default function Button() {
+  return <button id="submit-button" data-testid="submit-button" />;
+}
+```
+
+then the page contains three copies of that DOM, not one. Collapsing the JSX
+usage down to a single component instance would hide that fact and make the
+duplicate report less accurate.
+
+The fixed behavior keeps repeated JSX tags as repeated render instances, so the
+validator sees all three occurrences.
+
+10)
+Imported-but-unused components could be pulled into analysis incorrectly.
+
+This is the exact false-positive case that browser-level inspection often misses
+and that a file-graph-only analyzer can get wrong.
+
+Example:
+
+```tsx
+import Layout from "../components/layout/Layout";
+import SearchBox from "../components/ui/SearchBox";
+import SearchResults from "../components/ui/SearchResults";
+
+export default function ImportedButUnusedPage() {
+  return (
+    <Layout>
+      <SearchBox />
+    </Layout>
+  );
+}
+```
+
+`SearchResults` is imported, but it is not rendered. A naive import walk would
+still visit it and report a duplicate because `SearchResults` also contains:
+
+```tsx
+<div data-testid="search-input" />
+```
+
+That is wrong for page-scope analysis. The JSX-tree traversal only includes
+components that actually appear in the returned JSX, so `SearchResults` stays
+out of the page scope and the duplicate is not reported.
+
+11)
+Conditional JSX branches were not covered by the sample app, so the “static
+tree vs live DOM” distinction was not demonstrated.
+
+The sample now includes a page like this:
+
+```tsx
+export default function ConditionalBranchPage() {
+  const usePrimaryAction = Math.random() > 0.5;
+
+  return (
+    <>
+      {usePrimaryAction ? (
+        <ConditionalPrimaryButton />
+      ) : (
+        <ConditionalSecondaryButton />
+      )}
+    </>
+  );
+}
+```
+
+At runtime, only one branch is mounted. A browser extension that inspects the
+current DOM would only see whichever button happened to render on that run.
+
+Static analysis is doing something different:
+
+```tsx
+{usePrimaryAction ? (
+  <ConditionalPrimaryButton />
+) : (
+  <ConditionalSecondaryButton />
+)}
+```
+
+Both branches are present in source, so both are part of the static page scope.
+That is exactly why this tool can show the full JSX shape of the page while a
+browser-only approach cannot.
+
+12)
+Repeated component renders were being reported as multiple identical source
+lines instead of as one source location with a render count.
+
+This happened because the traversal was correctly seeing every render instance,
+but the reporting layer was flattening those instances directly into the final
+duplicate output.
+
+For example, this page:
+
+```tsx
+export default function ComponentReusePage() {
+  return (
+    <>
+      <Button />
+      <Button />
+      <Button />
+    </>
+  );
+}
+```
+
+with this component:
+
+```tsx
+export default function Button() {
+  return <button id="submit-button" data-testid="submit-button" />;
+}
+```
+
+really does contain three rendered copies of the same DOM.
+
+But if the validator just stores every occurrence as a raw line item, the output
+looks like this:
+
+```txt
+1. src/components/ui/Button.tsx:17:7
+2. src/components/ui/Button.tsx:17:7
+3. src/components/ui/Button.tsx:17:7
+```
+
+That is technically accurate, but it is not very useful. It reads like three
+different issues when it is really one location rendered three times.
+
+Before:
+
+```ts
+for (const [key, occurrences] of seen.entries()) {
+  if (occurrences.length <= 1) continue;
+
+  const [attribute, value] = key.split("\u0000");
+
+  issues.push({
+    page: page.file,
+    attribute,
+    value,
+    message: `Duplicate ${attribute} "${value}" found in page`,
+    occurrences: occurrences.map((o) => ({
+      file: o.file,
+      line: o.line,
+      column: o.column,
+    })),
+  });
+}
+```
+
+After:
+
+```ts
+for (const [key, occurrences] of seen.entries()) {
+  if (occurrences.length <= 1) continue;
+
+  const [attribute, value] = key.split("\u0000");
+  const compressedOccurrences = compressOccurrences(occurrences);
+
+  issues.push({
+    page: page.file,
+    attribute,
+    value,
+    message: `Duplicate ${attribute} "${value}" found in page`,
+    occurrences: compressedOccurrences,
+  });
+}
+```
+
+And the compressed occurrences are counted like this:
+
+```ts
+function compressOccurrences(occurrences: DomAttribute[]): ValidationIssue["occurrences"] {
+  const grouped = new Map<string, ValidationIssue["occurrences"][number]>();
+
+  for (const occurrence of occurrences) {
+    const key = `${occurrence.file}\u0000${occurrence.line}\u0000${occurrence.column}`;
+    const existing = grouped.get(key);
+
+    if (existing) {
+      existing.count += 1;
+      continue;
+    }
+
+    grouped.set(key, {
+      file: occurrence.file,
+      line: occurrence.line,
+      column: occurrence.column,
+      count: 1,
+    });
+  }
+
+  return [...grouped.values()];
+}
+```
+
+So the final report becomes clearer:
+
+```txt
+1. src/components/ui/Button.tsx:17:7 (x3)
+```
+
+That is the same duplicate, but presented in a way that reflects how many times
+the component was actually rendered without pretending there are three separate
+source locations.

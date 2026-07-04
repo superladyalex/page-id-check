@@ -10,6 +10,12 @@ export interface ValidationIssue {
     file: string;
     line: number;
     column: number;
+    renderPath: {
+      file: string;
+      line: number;
+      column: number;
+      name: string;
+    }[];
   }[];
 }
 
@@ -52,6 +58,7 @@ export function validate(pages: FileAnalysis[]): ValidationIssue[] {
           file: o.file,
           line: o.line,
           column: o.column,
+          renderPath: o.renderPath,
         })),
       });
     }

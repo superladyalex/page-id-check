@@ -75,11 +75,11 @@ Select a config and then `yarn check` from this repo's root.
 
 ## Sample apps
 
-There are 2 sample apps that are ment to help with testing this project. 
+There are 2 sample apps that are meant to help with testing this project. 
 **You should clone them as siblings to this repo**
 
-Sample app (unhappy paths)  [`sample-app-for-page-id-check`](https://github.com/superladyalex/sample-app-for-page-id-check)
-Sample app happy path (no issues)  [`sample-app-happy-path-for-page-id-check`](https://github.com/superladyalex/sample-app-happy-path-for-page-id-check)
+- Sample app (unhappy paths)  [`sample-app-for-page-id-check`](https://github.com/superladyalex/sample-app-for-page-id-check)
+- Sample app happy path (no issues)  [`sample-app-happy-path-for-page-id-check`](https://github.com/superladyalex/sample-app-happy-path-for-page-id-check)
 
 That unhappy paths sample includes:
 

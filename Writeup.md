@@ -13,10 +13,40 @@ Anchor navigation: IDs are used as targets for fragment links (e.g. site.com/pag
 
 I've always thought that there should be a simple way to detect duplicate attributes early and surface them before they turn into subtle, hard-to-track bugs.
 
+## Why I Chose a Static JSX Analyzer
+
+I wanted a static way to catch duplicate DOM attributes in React-style UI code without executing the app. The analyzer therefore builds a deterministic component graph directly from TSX/JSX source: it parses the page file, finds JSX component usages, resolves the imports behind those usages, and walks the resulting tree. That lets it report potential duplicates from the structure of the code alone.
+
+### Why it is React-specific
+
+- It parses `.tsx` files and JSX nodes.
+- It treats PascalCase JSX tags as components.
+- It follows component composition through imports and barrels.
+- It handles conditional rendering by keeping both branches.
+- It records DOM attributes on lowercase HTML elements, but does not traverse into them as components.
+
+### How HTML elements are treated
+
+The parser only treats PascalCase JSX tags as components. Lowercase tags like `div`, `button`, and `input` are terminal DOM nodes: their attributes are recorded, but the traversal does not recurse into them as components.
+
+```ts
+function isComponentTag(tag: string): boolean {
+  return /^[A-Z]/.test(tag);
+}
+```
+
+That means the analyzer checks DOM attributes on real rendered elements, but only traverses into custom React components.
+
+### Framework boundaries
+
+This model fits React and other JSX-based frameworks like React. It is not a good fit for template-driven frameworks like Vue, Svelte, or Angular, because their component trees are not expressed through JSX and import relationships in the same way.
+
 
 # How you used AI and what worked or didn’t
 
 I used Codex throughout the development process. Overall, it was helpful in accelerating implementation, but there were several areas where we had misalignment that required iteration and clarification.
+I also used Codex to refine the documentation and to review my work, helping identify assumptions that were worth revisiting.
+
 
 ## Areas of miscommunication
 
@@ -51,12 +81,32 @@ We also iterated multiple times on **output structure and formatting**. Early ve
 
 ## Testing approach
 
-There was also initial misalignment around testing strategy. I intended for:
+There was also initial misalignment around testing strategy. I intended for the test suite to be made of
+small, deterministic unit tests, but at first we leaned too heavily on the sample application as the source
+of truth.
 
-- unit tests for core logic
-- integration-style tests against intentionally designed sample applications
+That worked for demonstrating the analyzer end-to-end, but it made the tests more coupled than necessary:
 
-Codex initially leaned toward more implementation-driven testing patterns, so we adjusted the approach to focus on deterministic integration tests using the sample apps as ground truth.
+- they depended on a sibling repository being present in a specific path
+- they relied on shared repo config instead of explicit test inputs
+- they made it harder to reason about whether a failure came from traversal, validation, or fixture setup
+
+We corrected that by moving the tests to temporary, self-contained fixtures.
+
+That split the suite into focused unit-level coverage:
+
+- parser tests for JSX normalization and component usage detection
+- resolver tests for relative imports and barrel exports
+- traversal tests for nested render paths, aliases, namespace imports, and conditional branches
+- validator tests for duplicate grouping and empty-value handling
+- formatter tests for report output
+
+The main benefit was that each test now owns its own mini project and its own config inputs. That means a
+failure is usually local to one concern, and the suite no longer depends on the sample app for basic
+correctness checks.
+
+The sample app is still useful as a demonstration of the real analyzer behavior, but the tests themselves
+now stay deterministic and isolated.
 
 ## Outcome
 
@@ -72,21 +122,27 @@ Overall, the process helped progressively clarify the design boundaries and led 
 
 # Where the AI got things wrong and how you dealt with it
 
-## Some bugs it produced were:
+## Summary
 
-### Duplicate traversal via imports
-The same module was being traversed multiple times via different import paths:
+The main mistakes fell into three buckets:
 
-- default import
-- named import
-- namespace import
-- barrel export
+- traversal scope was too broad and too dependent on imports
+- JSX values were not consistently normalized before validation
+- the report format lost useful provenance or compressed repeated occurrences too aggressively
 
-This caused components like Button.tsx to be visited multiple times per page.
+Those issues mattered because they affected both correctness and trust. A tool like this needs to answer two questions clearly:
 
-Import resolution was correct functionally, but there was no deduplication layer at the traversal level.
+- what is actually part of the page?
+- where did each duplicate come from?
 
-So even if two imports resolved to the same file, they were still treated as separate traversal targets.
+## Traversal scope was too broad
+
+The biggest early mistake was treating imports as if they defined page scope.
+
+That caused two related problems:
+
+- imported-but-unused components were pulled into the analysis
+- the same file could be traversed multiple times through different import shapes
 
 Before:
 ```typescript
@@ -97,134 +153,130 @@ for (const imp of analysis.imports) {
 
   walk(resolvedPath);
 }
-
 ```
 
+That approach walked the file graph, not the render tree. It also made barrel files and re-export chains more fragile than they needed to be.
 
-### Barrel exports caused exponentiaal traversal
-Barrel files (index.ts) caused repeated re-traversal of the same import graph:
-- each export re-triggered full import resolution
-- nested barrels amplified traversal exponentially
-
+After ([src/buildPageAnalysis.ts]):
 ```typescript
-for (const exported of resolveExports(filePath)) {
-  for (const imp of analysis.imports) {
-    walk(resolveImport(filePath, imp.module));
+export function buildPageAnalysis(
+  entryFile: string,
+  repoRoot: string,
+  exclude: string[]
+): FileAnalysis {
+  // Excerpt: the inner walk loop uses JSX usage to decide which imports to follow.
+  for (const usage of analysis.componentUsages) {
+    for (const imp of analysis.imports) {
+      const exportName = getExportNameForUsage(imp, usage);
+      if (!exportName) continue;
+
+      const resolved = resolveImport(id, imp.module);
+      if (!resolved) continue;
+
+      const nextRenderPath = [
+        ...renderPath,
+        {
+          file: id,
+          line: usage.line,
+          column: usage.column,
+          name: usage.name,
+        },
+      ];
+
+      const exportTargets = resolveExportTargets(resolved, exportName);
+      if (exportTargets.length === 0) {
+        walk(resolved, nextPathStack, nextRenderPath);
+        continue;
+      }
+
+      for (const exportTarget of exportTargets) {
+        walk(exportTarget, nextPathStack, nextRenderPath);
+      }
+    }
   }
-}
 
-```
-
-
-### Imported-but-unused components were incorrectly included
-
-```typescript
-import SearchResults from "../SearchResults";
-
-export default function Page() {
-  return <SearchBox />;
 }
 ```
-SearchResults was still included in analysis because traversal was driven by imports instead of JSX usage.
 
-I switched traversal root to JSX render tree only:
-- only components referenced in JSX are traversed
-- unused imports are ignored
+That change tied traversal to JSX usage instead of “anything imported,” which made the page scope much closer to the actual render tree.
+In the current code, tests pass their own `repoRoot` and `exclude` values directly, so the helper no longer reads repo config internally. In other words, this is not the full function body; it is the part that changed the traversal rule from import-driven to JSX-driven.
 
-This aligns the analyzer with actual UI behavior, if it is not rendered in JSX, it is not part of the page graph.
+## JSX values needed normalization
 
+The next problem was that attribute values were being compared in their raw AST form instead of as normalized semantic values.
 
-### JSX attribute values were not normalized
-Attribute values were sometimes stored in their raw AST form instead of normalized string values.
-This led to inconsistent duplicate detection outputs such as:
-```typescript
-data-testid: ""search-input""
-data-testid: "\"search-input\""
-```
-Even though they both represented the same value 
-
-The analyzer was reading AST nodes directly without consistently resolving:
-- string literals
-- template literals
-- JSX expression wrappers
-
-Before: 
+Before:
 ```typescript
 function getValue(initializer: any) {
   return initializer?.getText();
 }
 ```
-The analyzer now compares:
 
-semantic attribute values, not raw syntax
+That led to duplicate reports that looked different even when they represented the same value.
 
-This ensures:
-- consistent duplicate detection
-- stable output formatting
-- correct grouping of logically identical values
-
-
-### Unsafe string-based duplicate keys
-
-Duplicate detection used string concatenation:
-
-Before
+After ([src/parser.ts]):
 ```typescript
-const key = `${attr.name}:${attr.value}`;
-```
-This introduced ambiguity when values contained `:` - something like `data-testid:user:profile` could not be reliably split back into original parts, because a simple delimiter was chosen without considering value collision risk.
+function normalizeAttributeValue(initializer: any): string | null {
+  if (!initializer) return null;
 
-After
-```typescript
-const key = `${attr.name}\u0000${attr.value}`;
-```
-I chose the null character (\u0000) because:
-- extremely unlikely in real DOM values
-- safe for deterministic splitting
-- reversible without ambiguity
+  if (
+    Node.isStringLiteral(initializer) ||
+    Node.isNoSubstitutionTemplateLiteral(initializer)
+  ) {
+    return initializer.getLiteralText();
+  }
 
-It guarantees stable grouping, and lossless reconstruction of attribute data
+  if (Node.isJsxExpression(initializer)) {
+    const expression = initializer.getExpression();
 
+    if (
+      expression &&
+      (Node.isStringLiteral(expression) ||
+        Node.isNoSubstitutionTemplateLiteral(expression))
+    ) {
+      return expression.getLiteralText();
+    }
 
-### Over-aggressive import graph expansion
-The traversal layer treated imports as always relevant to page scope,even when those imports were not used in JSX. This caused unrelated components to leak into page analysis.
+    return expression?.getText() ?? null;
+  }
 
-```typescript
-for (const imp of analysis.imports) {
-  const resolved = resolveImport(filePath, imp.module);
-  walk(resolved);
+  const text = initializer.getText();
+  const singleQuoted = text.match(/^'(.*)'$/s);
+  if (singleQuoted) return singleQuoted[1];
+
+  const doubleQuoted = text.match(/^"(.*)"$/s);
+  if (doubleQuoted) return doubleQuoted[1];
+
+  return text;
 }
 ```
 
-Traversal is now gated by actual JSX usage. Imports are resolved only if they are referenced in the render tree.
+That normalization made duplicate detection and output much more stable.
 
+## The report needed more provenance
 
-### Hardcoding attributes
-the attributes we were working with were hardcoded into the codebase rather than coming from a config file. 
+The report initially showed where the duplicate existed, but not how the component was reached.
 
-Before
+Before:
 ```typescript
-for (const attr of page.attributes) {
-      if (attr.name !== "id" && attr.name !== "data-testid") {
-        continue;
-      }
+export interface ValidationIssue {
+  page: string;
+  attribute: string;
+  value: string;
+  message: string;
+  occurrences: {
+    file: string;
+    line: number;
+    column: number;
+  }[];
+}
 ```
 
-After
-```typescript
-for (const attr of page.attributes) {
-    if (!config.duplicateAttributes.includes(attr.name)) {
-        continue;
-    }
-```
+That made it harder to understand repeated renders or nested component paths.
 
+Before output:
 
-### Missing render path
-Previously, validation output did not include how a component was reached in the render tree.
-
-Before output
-
-```
+```text
 Page: /Users/alexandra/repos/sample-app-for-page-id-check/src/pages/ConditionalBranchPage.tsx
 data-testid: "conditional-action"
 
@@ -232,124 +284,68 @@ data-testid: "conditional-action"
 2. /Users/alexandra/repos/sample-app-for-page-id-check/src/components/ui/ConditionalSecondaryButton.tsx:8:37
 ```
 
-Before code
+This told you which files had the duplicate, but not which branch or render site pulled them in.
+
+After ([src/validator.ts]):
 ```typescript
-
 export interface ValidationIssue {
-    page: string;
-    attribute: string;
-    value: string;
-    message: string;
-    occurrences: {
-        file: string;
-        line: number;
-        column: number;
+  page: string;
+  attribute: string;
+  value: string;
+  message: string;
+  occurrences: {
+    file: string;
+    line: number;
+    column: number;
+    renderPath: {
+      file: string;
+      line: number;
+      column: number;
+      name: string;
     }[];
+  }[];
 }
-
-
-issues.push({
-        page: page.file,
-        attribute,
-        value,
-        message: `Duplicate ${attribute} "${value}" found in page tree`,
-        occurrences: occurrences.map((o) => ({
-          file: o.file,
-          line: o.line,
-          column: o.column,
-        })),
-      });
 ```
 
+And the output became ([src/index.ts]):
 
-After output
-```
-Page: /Users/alexandra/repos/sample-app-for-page-id-check/src/pages/ConditionalBranchPage.tsx
-data-testid: "conditional-action"
-
+```text
 1. /Users/alexandra/repos/sample-app-for-page-id-check/src/components/ui/ConditionalPrimaryButton.tsx:8:37 via /Users/alexandra/repos/sample-app-for-page-id-check/src/pages/ConditionalBranchPage.tsx:21:9
 2. /Users/alexandra/repos/sample-app-for-page-id-check/src/components/ui/ConditionalSecondaryButton.tsx:8:37 via /Users/alexandra/repos/sample-app-for-page-id-check/src/pages/ConditionalBranchPage.tsx:23:9
-
 ```
 
-After Code
-```typescript
+That extra path context shows which render site led to each duplicate, which is the piece that was missing before.
 
-export interface ValidationIssue {
-    page: string;
-    attribute: string;
-    value: string;
-    message: string;
-    occurrences: {
-        file: string;
-        line: number;
-        column: number;
-        renderPath: {
-            file: string;
-            line: number;
-            column: number;
-            name: string;
-        }[];
-    }[];
-}
+## Repeated occurrences were compressed too aggressively
 
+At one point, repeated renders were collapsed into a single `(x3)` entry.
 
-      issues.push({
-    page: page.file,
-    attribute,
-    value,
-    message: `Duplicate ${attribute} "${value}" found in page`,
-    occurrences: occurrences.map((o) => ({
-        file: o.file,
-        line: o.line,
-        column: o.column,
-        renderPath: o.renderPath,
-    })),
-});
+That was concise, but it hid where the repeated renders came from.
 
-```
-
-### Occurrences were grouped and compressed:
-
-
-Before Example 
-```
-Page: /Users/alexandra/repos/sample-app-for-page-id-check/src/pages/ComponentReusePage.tsx
-id: "submit-button"
-
+Before:
+```text
 1. /Users/alexandra/repos/sample-app-for-page-id-check/src/components/ui/Button.tsx:17:7 (x3)
 ```
 
-After
-```
-Page: /Users/alexandra/repos/sample-app-for-page-id-check/src/pages/ComponentReusePage.tsx
-data-testid: "submit-button"
-
-1. /Users/alexandra/repos/sample-app-for-page-id-check/src/components/ui/Button.tsx:18:7 via src/pages/ComponentReusePage.tsx:31:9
-2. /Users/alexandra/repos/sample-app-for-page-id-check/src/components/ui/Button.tsx:18:7 via src/pages/ComponentReusePage.tsx:33:9
-3. /Users/alexandra/repos/sample-app-for-page-id-check/src/components/ui/Button.tsx:18:7 via src/pages/ComponentReusePage.tsx:35:9
-
+After ([src/index.ts]):
+```text
+1. /Users/alexandra/repos/sample-app-for-page-id-check/src/components/ui/Button.tsx:18:7 via /Users/alexandra/repos/sample-app-for-page-id-check/src/pages/ComponentReusePage.tsx:31:9
+2. /Users/alexandra/repos/sample-app-for-page-id-check/src/components/ui/Button.tsx:18:7 via /Users/alexandra/repos/sample-app-for-page-id-check/src/pages/ComponentReusePage.tsx:33:9
+3. /Users/alexandra/repos/sample-app-for-page-id-check/src/components/ui/Button.tsx:18:7 via /Users/alexandra/repos/sample-app-for-page-id-check/src/pages/ComponentReusePage.tsx:35:9
 ```
 
-### Removing unnecessary abstractions
+The improved version is longer, but it is far more useful when you need to trace the source of duplicates.
 
-```typescript
-import path from "path";
+## Smaller cleanup passes
 
-/** Normalize a path to an absolute filesystem path. */
-export function normalizePath(filePath: string): string {
-  return path.resolve(filePath);
-}
-```
+There were also a few smaller cleanups that reduced noise:
 
-Then in a few places I had `normalizePath(filename)`. 
-`normalizePath()` simply wrapped `path.resolve()`, and every call site already provided an absolute path. The abstraction added no behavior,
-so it was removed to simplify the codebase.
+- duplicate attribute names were made injectable instead of being hardcoded into validation
+- discovery and exclusion logic were parameterized so tests could supply their own roots and ignore lists
+- unnecessary wrapper abstractions were removed when they added no behavior
+- some traversal and output helpers were simplified once the new structure was stable
 
-
-# What you’d improve with more time
-I think there are a lot of things that could use improvement (see the limitations section), but I just picked a few things 
-here that I had either tried to get in or really wished I had gotten to.
+Those changes were less dramatic than the traversal and reporting fixes, but they helped keep the codebase easier to reason about.
 
 
 # What I'd Improve with More Time
@@ -412,6 +408,10 @@ The analyzer is intentionally deterministic and static. It builds a compile-time
 This approach favors predictability and repeatability over runtime accuracy. Rather than attempting to determine which code paths will execute, the analyzer reports every potential duplicate visible in the static component graph.
 
 To keep the implementation focused and deterministic, several features are intentionally out of scope. Others reflect implementation trade-offs made to balance complexity, correctness, and development time. The known limitations are outlined below.
+
+### Framework boundaries
+
+The analyzer fits React and other JSX-based frameworks best. It is not a good fit for template-driven frameworks like Vue, Svelte, or Angular without a different parser and traversal model.
 
 
 ## Runtime Semantics
@@ -639,4 +639,3 @@ are treated as terminal DOM nodes.
 This matches common React conventions but assumes component naming follows standard JSX practices.
 
 ---
-

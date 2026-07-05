@@ -7,8 +7,8 @@ export const config: {
   duplicateAttributes: string[];
 } = {
   // repoRoot: path.resolve("../sample-app-happy-path-for-page-id-check"),
-  // repoRoot: path.resolve("../sample-app-for-page-id-check"),
-  repoRoot: path.resolve("."),
+   repoRoot: path.resolve("../sample-app-for-page-id-check"),
+  // repoRoot: path.resolve("."),
   pages: ["src/pages/**/*.tsx", "src/screens/**/*.tsx"],
   exclude: ["**/node_modules/**", "**/*.test.tsx", "**/*.spec.tsx"],
   duplicateAttributes: ["id", "data-testid"],

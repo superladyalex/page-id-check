@@ -13,7 +13,7 @@ export async function main(): Promise<void> {
     console.log(`Repository: ${root}`);
 
     // Step 1 - Discover page entry points
-    const pages = await discover(config.pages, root);
+    const pages = await discover(config.pages, root, config.exclude);
 
     if (pages.length === 0) {
         console.log("\n⚠️  No pages matched your configuration.\n");
@@ -44,10 +44,12 @@ Suggestions:
     for (const page of pages) {
         console.log(`➡️  ${page}`);
 
-        pageAnalyses.push(buildPageAnalysis(page));
+        pageAnalyses.push(
+            buildPageAnalysis(page, root, config.exclude)
+        );
     }
 
-    const issues = validate(pageAnalyses);
+    const issues = validate(pageAnalyses, config.duplicateAttributes);
 
     if (issues.length === 0) {
         console.log("\n✅ No duplicate DOM attributes found.\n");

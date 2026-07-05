@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { validate } from "../validator.js";
+import { TEST_DUPLICATE_ATTRIBUTES } from "./testConfig.js";
 
 test("validator ignores empty values", () => {
   const page = {
@@ -28,5 +29,5 @@ test("validator ignores empty values", () => {
     componentUsages: [],
   };
 
-  assert.deepEqual(validate([page]), []);
+  assert.deepEqual(validate([page], TEST_DUPLICATE_ATTRIBUTES), []);
 });

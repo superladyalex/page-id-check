@@ -1,5 +1,4 @@
 import type { FileAnalysis, DomAttribute } from "./types.js";
-import { config } from "./config.js";
 
 export interface ValidationIssue {
   page: string;
@@ -19,14 +18,17 @@ export interface ValidationIssue {
   }[];
 }
 
-export function validate(pages: FileAnalysis[]): ValidationIssue[] {
+export function validate(
+  pages: FileAnalysis[],
+  duplicateAttributes: string[]
+): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
 
   for (const page of pages) {
     const seen = new Map<string, DomAttribute[]>();
 
     for (const attr of page.attributes) {
-      if (!config.duplicateAttributes.includes(attr.name)) {
+      if (!duplicateAttributes.includes(attr.name)) {
         continue;
       }
 

@@ -6,7 +6,11 @@ import { isExcluded } from "./isExcluded.js";
 import type { FileAnalysis, DomAttribute } from "./types.js";
 import type { RenderStep } from "./types.js";
 
-export function buildPageAnalysis(entryFile: string): FileAnalysis {
+export function buildPageAnalysis(
+  entryFile: string,
+  repoRoot: string,
+  exclude: string[]
+): FileAnalysis {
   const analysisCache = new Map<string, FileAnalysis>();
   const allAttributes: DomAttribute[] = [];
   const allImports: FileAnalysis["imports"] = [];
@@ -19,7 +23,7 @@ export function buildPageAnalysis(entryFile: string): FileAnalysis {
   ) {
     const id = filePath;
 
-    if (isExcluded(id)) return;
+    if (isExcluded(id, repoRoot, exclude)) return;
     if (pathStack.has(id)) return;
 
     const analysis = getAnalysis(id);

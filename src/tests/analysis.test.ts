@@ -4,6 +4,10 @@ import test from "node:test";
 import { buildPageAnalysis } from "../buildPageAnalysis.js";
 import { validate, type ValidationIssue } from "../validator.js";
 import { createTempProject, fixturePath } from "./testUtils.js";
+import {
+  TEST_DUPLICATE_ATTRIBUTES,
+  TEST_EXCLUDE,
+} from "./testConfig.js";
 
 function createTraversalProject(): string {
   return createTempProject({
@@ -69,7 +73,10 @@ export default function ConditionalBranchPage() {
 test("buildPageAnalysis ignores imported but unused components", () => {
   const root = createTraversalProject();
   const page = fixturePath(root, "src/pages/ImportedButUnusedPage.tsx");
-  const issues = validate([buildPageAnalysis(page)]);
+  const issues = validate(
+    [buildPageAnalysis(page, root, TEST_EXCLUDE)],
+    TEST_DUPLICATE_ATTRIBUTES
+  );
 
   assert.deepEqual(issues, []);
 });
@@ -77,7 +84,10 @@ test("buildPageAnalysis ignores imported but unused components", () => {
 test("buildPageAnalysis keeps repeated renders in the page scope", () => {
   const root = createTraversalProject();
   const page = fixturePath(root, "src/pages/ComponentReusePage.tsx");
-  const issues = validate([buildPageAnalysis(page)]);
+  const issues = validate(
+    [buildPageAnalysis(page, root, TEST_EXCLUDE)],
+    TEST_DUPLICATE_ATTRIBUTES
+  );
   const idIssue = issues.find((issue) => issue.attribute === "id");
   const dataTestIdIssue = issues.find((issue) => issue.attribute === "data-testid");
 
@@ -99,7 +109,10 @@ test("buildPageAnalysis keeps repeated renders in the page scope", () => {
 test("buildPageAnalysis follows conditional JSX branches", () => {
   const root = createTraversalProject();
   const page = fixturePath(root, "src/pages/ConditionalBranchPage.tsx");
-  const issues = validate([buildPageAnalysis(page)]);
+  const issues = validate(
+    [buildPageAnalysis(page, root, TEST_EXCLUDE)],
+    TEST_DUPLICATE_ATTRIBUTES
+  );
 
   assert.deepEqual(summary(issues), [
     "data-testid:conditional-action:2",
@@ -110,7 +123,10 @@ test("buildPageAnalysis follows conditional JSX branches", () => {
 test("buildPageAnalysis can produce a clean page with no duplicate issues", () => {
   const root = createTraversalProject();
   const page = fixturePath(root, "src/pages/CleanPage.tsx");
-  const issues = validate([buildPageAnalysis(page)]);
+  const issues = validate(
+    [buildPageAnalysis(page, root, TEST_EXCLUDE)],
+    TEST_DUPLICATE_ATTRIBUTES
+  );
 
   assert.deepEqual(issues, []);
 });

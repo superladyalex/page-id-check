@@ -7,6 +7,10 @@ import { isExcluded } from "../isExcluded.js";
 import { resolveExportTargets } from "../resolveExport.js";
 import { validate, type ValidationIssue } from "../validator.js";
 import { createTempProject, fixturePath } from "./testUtils.js";
+import {
+  TEST_DUPLICATE_ATTRIBUTES,
+  TEST_EXCLUDE,
+} from "./testConfig.js";
 
 test("buildPageAnalysis tracks nested render paths", () => {
   const root = createTempProject({
@@ -35,7 +39,9 @@ export default function Section() {
   });
 
   const analysis = buildPageAnalysis(
-    fixturePath(root, "src/pages/NestedRenderPage.tsx")
+    fixturePath(root, "src/pages/NestedRenderPage.tsx"),
+    root,
+    TEST_EXCLUDE
   );
   const buttonAttr = analysis.attributes.find(
     (attr) => attr.name === "id" && attr.value === "nested-button"
@@ -68,7 +74,12 @@ export default function NamespacePage() {
 `,
   });
 
-  const issues = validate([buildPageAnalysis(fixturePath(root, "src/pages/NamespacePage.tsx"))]);
+  const issues = validate(
+    [
+      buildPageAnalysis(fixturePath(root, "src/pages/NamespacePage.tsx"), root, TEST_EXCLUDE),
+    ],
+    TEST_DUPLICATE_ATTRIBUTES
+  );
 
   assert.deepEqual(summary(issues), [
     "data-testid:namespace-button:2",
@@ -97,7 +108,12 @@ export default function AliasedPage() {
 `,
   });
 
-  const issues = validate([buildPageAnalysis(fixturePath(root, "src/pages/AliasedPage.tsx"))]);
+  const issues = validate(
+    [
+      buildPageAnalysis(fixturePath(root, "src/pages/AliasedPage.tsx"), root, TEST_EXCLUDE),
+    ],
+    TEST_DUPLICATE_ATTRIBUTES
+  );
 
   assert.deepEqual(summary(issues), [
     "data-testid:aliased-button:2",
@@ -130,7 +146,12 @@ export default function BrokenImportPage() {
 `,
   });
 
-  const issues = validate([buildPageAnalysis(fixturePath(root, "src/pages/BrokenImportPage.tsx"))]);
+  const issues = validate(
+    [
+      buildPageAnalysis(fixturePath(root, "src/pages/BrokenImportPage.tsx"), root, TEST_EXCLUDE),
+    ],
+    TEST_DUPLICATE_ATTRIBUTES
+  );
 
   assert.deepEqual(issues, []);
 });
@@ -139,14 +160,29 @@ test("exclude patterns are honored", () => {
   const root = createTempProject({
     "src/pages/VisiblePage.tsx": "export default function VisiblePage() { return null; }\n",
     "src/pages/VisiblePage.test.tsx": "export default function VisiblePageTest() { return null; }\n",
-    "dist/GeneratedPage.tsx": "export default function GeneratedPage() { return null; }\n",
     "node_modules/pkg/HiddenPage.tsx": "export default function HiddenPage() { return null; }\n",
   });
 
-  assert.equal(isExcluded(fixturePath(root, "src/pages/VisiblePage.tsx"), root), false);
-  assert.equal(isExcluded(fixturePath(root, "src/pages/VisiblePage.test.tsx"), root), true);
-  assert.equal(isExcluded(fixturePath(root, "dist/GeneratedPage.tsx"), root), true);
-  assert.equal(isExcluded(fixturePath(root, "node_modules/pkg/HiddenPage.tsx"), root), true);
+  assert.equal(
+    isExcluded(fixturePath(root, "src/pages/VisiblePage.tsx"), root, TEST_EXCLUDE),
+    false
+  );
+  assert.equal(
+    isExcluded(
+      fixturePath(root, "src/pages/VisiblePage.test.tsx"),
+      root,
+      TEST_EXCLUDE
+    ),
+    true
+  );
+  assert.equal(
+    isExcluded(
+      fixturePath(root, "node_modules/pkg/HiddenPage.tsx"),
+      root,
+      TEST_EXCLUDE
+    ),
+    true
+  );
 });
 
 test("buildPageAnalysis reports duplicate attributes from separate branches", () => {
@@ -174,7 +210,12 @@ export default function BranchDuplicatePage() {
 `,
   });
 
-  const issues = validate([buildPageAnalysis(fixturePath(root, "src/pages/BranchDuplicatePage.tsx"))]);
+  const issues = validate(
+    [
+      buildPageAnalysis(fixturePath(root, "src/pages/BranchDuplicatePage.tsx"), root, TEST_EXCLUDE),
+    ],
+    TEST_DUPLICATE_ATTRIBUTES
+  );
 
   assert.deepEqual(summary(issues), [
     "data-testid:branch-duplicate:2",

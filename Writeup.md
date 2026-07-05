@@ -104,7 +104,7 @@ for (const imp of analysis.imports) {
 ```
 
 
-### Barrel exports caused exponential traversal
+### Barrel exports caused exponentiaal traversal
 Barrel files (index.ts) caused repeated re-traversal of the same import graph:
 - each export re-triggered full import resolution
 - nested barrels amplified traversal exponentially
@@ -157,8 +157,6 @@ function getValue(initializer: any) {
   return initializer?.getText();
 }
 ```
-
-Code has changed significantly since
 The analyzer now compares:
 
 semantic attribute values, not raw syntax
@@ -272,8 +270,8 @@ After output
 Page: /Users/alexandra/repos/sample-app-for-page-id-check/src/pages/ConditionalBranchPage.tsx
 data-testid: "conditional-action"
 
-1. /Users/alexandra/repos/sample-app-for-page-id-check/src/components/ui/ConditionalPrimaryButton.tsx:8:37
-2. /Users/alexandra/repos/sample-app-for-page-id-check/src/components/ui/ConditionalSecondaryButton.tsx:8:37
+1. /Users/alexandra/repos/sample-app-for-page-id-check/src/components/ui/ConditionalPrimaryButton.tsx:8:37 via /Users/alexandra/repos/sample-app-for-page-id-check/src/pages/ConditionalBranchPage.tsx:21:9
+2. /Users/alexandra/repos/sample-app-for-page-id-check/src/components/ui/ConditionalSecondaryButton.tsx:8:37 via /Users/alexandra/repos/sample-app-for-page-id-check/src/pages/ConditionalBranchPage.tsx:23:9
 
 ```
 
@@ -325,7 +323,6 @@ id: "submit-button"
 1. /Users/alexandra/repos/sample-app-for-page-id-check/src/components/ui/Button.tsx:17:7 (x3)
 ```
 
-
 After
 ```
 Page: /Users/alexandra/repos/sample-app-for-page-id-check/src/pages/ComponentReusePage.tsx
@@ -337,7 +334,7 @@ data-testid: "submit-button"
 
 ```
 
-### Code that did nothing
+### Removing unnecessary abstractions
 
 ```typescript
 import path from "path";
@@ -348,11 +345,13 @@ export function normalizePath(filePath: string): string {
 }
 ```
 
-Then in a few places I had `normalizePath(filename)` That did nothing, so I removed it all.
+Then in a few places I had `normalizePath(filename)`. 
+`normalizePath()` simply wrapped `path.resolve()`, and every call site already provided an absolute path. The abstraction added no behavior,
+so it was removed to simplify the codebase.
 
 
 # What you’d improve with more time
-I think there are alot of things that could use improvement (see the limitations section), but I just picked a few things 
+I think there are a lot of things that could use improvement (see the limitations section), but I just picked a few things 
 here that I had either tried to get in or really wished I had gotten to.
 
 
@@ -378,10 +377,12 @@ I tried to change the following and was unsuccessful
 
 Right now:
 * analyzeTsxFile() can rerun for the same file across pages
-* resolveImport() repeatedly hits fs.existsSync
-* resolveExportTargets() rereads files repeatedly
+* `resolveImport()` repeatedly hits `fs.existsSync`
+* `resolveExportTargets()` rereads files repeatedly
 
-I think we could do something like this
+All that can cause major performane problems when dealing with larger/more realistic code bases. 
+
+I think we could do something like this but am not 100% sure and would want more time
 ```typescript
 const fileAnalysisCache = new Map<string, FileAnalysis>();
 const importResolutionCache = new Map<string, string | null>();

@@ -531,19 +531,42 @@ Meaning:
 - `exclude` is applied throughout discovery and traversal.
 - `duplicateAttributes` defines which DOM attributes are checked.
 
-## 2. Page discovery
+
+## 2. CLI entry point 
+
+The analyzer starts in [`src/index.ts`](/src/index.ts)
+
+It performs the top-level orchestration:
+
+* Reads configuration (repoRoot, patterns, rules)
+* Discovers page entry files
+* Builds a full page analysis for each entry file
+* Runs validation over the collected page scope
+* Prints a report
+  * Exits with:
+    0 if no issues are found
+    1 if duplicates are detected
+
+## 3. Page discovery
 
 [`src/discover.ts`](src/discover.ts) uses `fast-glob` to find page files under `repoRoot`.
+* Search is constrained by config.pages
+* Global exclude patterns are applied
+* The result is a list of absolute file paths
+
+If no files match, the CLI exits successfully with a warning.
 
 The result is a list of absolute file paths. If nothing matches, the CLI prints a warning and exits with code `0`.
 
-## 3. Render-tree traversal
+## 4. Building hte page scope (core traversal)
 
+This is the most important step
 [`src/buildPageAnalysis.ts`](src/buildPageAnalysis.ts) builds the page scope.
 
-The current traversal is JSX-driven:
+The current traversal is JSX-driven starting from each page file. 
 
-1. Parse the page file.
+High-level process:
+1. Parse the file.
 2. Collect the JSX component usages in that file.
 3. Match those usages to local imports.
 4. Resolve the matching component files.
@@ -556,7 +579,7 @@ Important:
 - Imported components that are not rendered are ignored.
 - Repeated JSX tags are counted as repeated instances, not collapsed into one.
 
-## 4. Parsing
+## 5. Parsing a single file
 
 [`src/parser.ts`](src/parser.ts) reads a single TSX file and extracts:
 

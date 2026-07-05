@@ -404,26 +404,43 @@ Neither produced an output format that I was happy with. Given more time, I'd re
 
 ---
 
-## Add global caches for file analysis and module resolution
+## Turn it into a GitHub Action
 
-Analysis is currently cached within a single page traversal, but not across the entire run.
+I would also consider packaging the analyzer as a GitHub Action so it can run automatically in CI.
 
-This means that when multiple pages reference the same components:
+That would make the tool easier to adopt because teams could:
 
-- `analyzeTsxFile()` may parse the same file multiple times
-- `resolveImport()` repeatedly performs the same filesystem lookups
-- `resolveExportTargets()` repeatedly reads and parses the same barrel files
+- run it on pull requests
+- fail the check when duplicates are introduced
+- annotate the changed files directly in the review
 
-For larger repositories, this unnecessary work could become a noticeable performance bottleneck.
+The implementation would likely be straightforward because the CLI already exits with a success/failure code. The main work would be:
 
-One possible approach would be to introduce process-wide caches, for example:
+- accepting repository configuration through inputs or env vars
+- documenting a simple workflow file
+- making the output concise enough for CI logs
 
-```typescript
-const fileAnalysisCache = new Map<string, FileAnalysis>();
-const importResolutionCache = new Map<string, string | null>();
-```
+That would turn the analyzer from a local developer tool into something that fits naturally into a code review pipeline.
 
-This would allow parsed files and resolved imports to be reused across page analyses rather than recomputed for each page.
+---
+
+## Run tests and publish artifacts in CI
+
+I would also set up CI to build, test, and publish artifacts from the analyzer.
+
+The basic flow would be:
+
+- run the unit test suite on every pull request
+- build the CLI on merge to main or on release tags
+- upload the built output as a CI artifact or publish it to an artifact repository
+
+That would make it easier to:
+
+- verify the analyzer stays healthy over time
+- keep a reproducible build artifact around for release or debugging
+- avoid relying on a local checkout when someone wants to inspect a specific build
+
+If I had more time, I would probably pair this with a small release workflow so tagged versions of the CLI could be distributed in a predictable way.
 
 ---
 
@@ -571,7 +588,7 @@ This preserves deterministic static analysis but means runtime-computed values c
 
 ---
 
-### No support for JSX spread attributtes
+### No support for JSX spread attributes
 ```typescript
 <div {...props} />
 ```
@@ -605,6 +622,16 @@ This affects:
 * performance (duplicate parsing and resolution work)
 * scalability across large multi-page repositories
 * consistency of analysis cost across runs
+
+If I were extending this, I would likely introduce three cache layers:
+
+* parsed file analysis cache keyed by absolute file path
+* import resolution cache keyed by `(fromFile, moduleSpecifier)`
+* barrel export resolution cache keyed by `(filePath, exportedName)`
+
+That would let repeated references reuse the same results instead of re-reading and re-parsing the same files over and over.
+
+The one thing I would watch carefully is invalidation. If the analyzer ever became a watch mode or a long-lived service, the caches would need to be aware of file changes so stale results do not leak into later runs.
 
 ---
 

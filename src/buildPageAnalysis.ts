@@ -2,7 +2,6 @@ import { analyzeTsxFile } from "./parser.js";
 import { resolveImport } from "./resolveImport.js";
 import { resolveExportTargets } from "./resolveExport.js";
 import { isExcluded } from "./isExcluded.js";
-import { normalizePath } from "./normalizePath.js";
 
 import type { FileAnalysis, DomAttribute } from "./types.js";
 import type { RenderStep } from "./types.js";
@@ -18,7 +17,7 @@ export function buildPageAnalysis(entryFile: string): FileAnalysis {
     pathStack: Set<string>,
     renderPath: RenderStep[]
   ) {
-    const id = normalizePath(filePath);
+    const id = filePath;
 
     if (isExcluded(id)) return;
     if (pathStack.has(id)) return;
@@ -68,7 +67,7 @@ export function buildPageAnalysis(entryFile: string): FileAnalysis {
   }
 
   function getAnalysis(filePath: string): FileAnalysis {
-    const id = normalizePath(filePath);
+    const id = filePath;
     const cached = analysisCache.get(id);
 
     if (cached) {

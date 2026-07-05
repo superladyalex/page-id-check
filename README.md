@@ -22,7 +22,7 @@ After that, the main commands **(some of which require configuration and the sam
 
 ```bash
 yarn build
-yarn check
+yarn check  (the command you will use to run)
 yarn test
 ```
 
@@ -45,11 +45,40 @@ Then it:
 3. validates duplicate attributes in the flattened page scope
 4. prints the duplicate report
 
-## Sample app
 
-The repo can point to a sample app  [`sample-app-for-page-id-check`](https://github.com/superladyalex/sample-app-for-page-id-check).
+```ts
+export const config = {
+  repoRoot: path.resolve("../sample-app-for-page-id-check"),
+  pages: ["src/pages/**/*.tsx", "src/screens/**/*.tsx"],
+  exclude: ["**/node_modules/**", "**/*.test.tsx", "**/*.spec.tsx"],
+  duplicateAttributes: ["id", "data-testid"],
+};
+```
 
-That sample includes:
+Meaning:
+
+- `repoRoot` points at the sample app repository.
+- `pages` defines the page entry-point globs.
+- `exclude` is applied throughout discovery and traversal.
+- `duplicateAttributes` defines which DOM attributes are checked.
+
+There are 3 possible repo roots you can use:
+- `../sample-app-for-page-id-check` - this will point at the sample app meant to exercise the logic within this repo -- you can use that path provided you `git clone` that repo as a sibling of where you have cloned this repo.
+- `"."` - this will point at THIS repo and will return the result that there is nothing configured and the output will tell you that
+- `"../sample-app-happy-path-for-page-id-check"` - this will point at the happy path sample app and exercise logic within this repo and tell you there are no issues
+
+Select a config and then `yarn check` from this repo's root. 
+
+
+## Sample apps
+
+There are 2 sample apps that are ment to help with testing this project. 
+**You should clone them as siblings to this repo**
+
+Sample app (unhappy paths)  [`sample-app-for-page-id-check`](https://github.com/superladyalex/sample-app-for-page-id-check)
+Sample app happy path (no issues)  [`sample-app-happy-path-for-page-id-check`](https://github.com/superladyalex/sample-app-happy-path-for-page-id-check)
+
+That unhappy paths sample includes:
 
 - repeated component rendering
 - imported-but-unused components
@@ -62,8 +91,104 @@ Those cases among others are used to use as a live integration repo for this cod
 
 ## Output Report
 The report includes the component source location plus the render path that led to it, so repeated renders are easier to trace back to the page source.
+Including the 3 results here. 
 
-XXXXXX 
+### Invalid Repo Root
+
+Page ID Check
+
+Repository: /Users/alexandra/repos/page-id-check
+
+⚠️  No pages matched your configuration.
+
+Searching for:
+• src/pages/**/*.tsx
+• src/screens/**/*.tsx
+
+Repository root: /Users/alexandra/repos/page-id-check
+
+Suggestions:
+• Verify repoRoot is correct.
+• Verify the page glob patterns.
+• Try a broader pattern like 'src/**/*.tsx'.
+
+
+### sample-app (unhappy paths)
+
+Page ID Check
+
+Repository: /Users/alexandra/repos/sample-app-for-page-id-check
+📄 Found 8 page(s).
+
+➡️  /Users/alexandra/repos/sample-app-for-page-id-check/src/pages/ComponentReusePage.tsx
+➡️  /Users/alexandra/repos/sample-app-for-page-id-check/src/pages/ConditionalBranchPage.tsx
+➡️  /Users/alexandra/repos/sample-app-for-page-id-check/src/pages/DashboardPage.tsx
+➡️  /Users/alexandra/repos/sample-app-for-page-id-check/src/pages/IdsVsTestIdPage.tsx
+➡️  /Users/alexandra/repos/sample-app-for-page-id-check/src/pages/ImportedButUnusedPage.tsx
+➡️  /Users/alexandra/repos/sample-app-for-page-id-check/src/pages/LoginPage.tsx
+➡️  /Users/alexandra/repos/sample-app-for-page-id-check/src/pages/ProfilePage.tsx
+➡️  /Users/alexandra/repos/sample-app-for-page-id-check/src/pages/SettingsPage.tsx
+
+🚨 Duplicate DOM attributes detected
+
+────────────────────────────────────────
+Page: /Users/alexandra/repos/sample-app-for-page-id-check/src/pages/ComponentReusePage.tsx
+id: "submit-button"
+
+1. /Users/alexandra/repos/sample-app-for-page-id-check/src/components/ui/Button.tsx:17:7 via src/pages/ComponentReusePage.tsx:31:9
+2. /Users/alexandra/repos/sample-app-for-page-id-check/src/components/ui/Button.tsx:17:7 via src/pages/ComponentReusePage.tsx:33:9
+3. /Users/alexandra/repos/sample-app-for-page-id-check/src/components/ui/Button.tsx:17:7 via src/pages/ComponentReusePage.tsx:35:9
+
+────────────────────────────────────────
+Page: /Users/alexandra/repos/sample-app-for-page-id-check/src/pages/ComponentReusePage.tsx
+data-testid: "submit-button"
+
+1. /Users/alexandra/repos/sample-app-for-page-id-check/src/components/ui/Button.tsx:18:7 via src/pages/ComponentReusePage.tsx:31:9
+2. /Users/alexandra/repos/sample-app-for-page-id-check/src/components/ui/Button.tsx:18:7 via src/pages/ComponentReusePage.tsx:33:9
+3. /Users/alexandra/repos/sample-app-for-page-id-check/src/components/ui/Button.tsx:18:7 via src/pages/ComponentReusePage.tsx:35:9
+
+────────────────────────────────────────
+Page: /Users/alexandra/repos/sample-app-for-page-id-check/src/pages/ConditionalBranchPage.tsx
+id: "conditional-action"
+
+1. /Users/alexandra/repos/sample-app-for-page-id-check/src/components/ui/ConditionalPrimaryButton.tsx:8:13 via src/pages/ConditionalBranchPage.tsx:21:9
+2. /Users/alexandra/repos/sample-app-for-page-id-check/src/components/ui/ConditionalSecondaryButton.tsx:8:13 via src/pages/ConditionalBranchPage.tsx:23:9
+
+────────────────────────────────────────
+Page: /Users/alexandra/repos/sample-app-for-page-id-check/src/pages/ConditionalBranchPage.tsx
+data-testid: "conditional-action"
+
+1. /Users/alexandra/repos/sample-app-for-page-id-check/src/components/ui/ConditionalPrimaryButton.tsx:8:37 via src/pages/ConditionalBranchPage.tsx:21:9
+2. /Users/alexandra/repos/sample-app-for-page-id-check/src/components/ui/ConditionalSecondaryButton.tsx:8:37 via src/pages/ConditionalBranchPage.tsx:23:9
+
+────────────────────────────────────────
+Page: /Users/alexandra/repos/sample-app-for-page-id-check/src/pages/LoginPage.tsx
+id: "submit-button"
+
+1. /Users/alexandra/repos/sample-app-for-page-id-check/src/components/ui/Button.tsx:17:7 via src/pages/LoginPage.tsx:36:9 -> src/components/forms/LoginForm.tsx:21:7
+2. /Users/alexandra/repos/sample-app-for-page-id-check/src/components/Footer.tsx:14:15 via src/pages/LoginPage.tsx:38:9
+
+────────────────────────────────────────
+Page: /Users/alexandra/repos/sample-app-for-page-id-check/src/pages/SettingsPage.tsx
+data-testid: "search-input"
+
+1. /Users/alexandra/repos/sample-app-for-page-id-check/src/components/ui/SearchBox.tsx:18:7 via src/pages/SettingsPage.tsx:33:9
+2. /Users/alexandra/repos/sample-app-for-page-id-check/src/components/ui/SearchResults.tsx:15:7 via src/pages/SettingsPage.tsx:35:9
+
+Found 6 duplicate issue(s).
+
+
+
+### sample-app (happy path)
+
+Page ID Check
+
+Repository: /Users/alexandra/repos/sample-app-happy-path-for-page-id-check
+📄 Found 1 page(s).
+
+➡️  /Users/alexandra/repos/sample-app-happy-path-for-page-id-check/src/pages/HomePage.tsx
+
+✅ No duplicate DOM attributes found.
 
 
 
@@ -85,7 +210,6 @@ The test suite covers:
 - imported-but-unused components
 - conditional JSX branches
 - validation of duplicate outputs
-
 
 
 
@@ -301,113 +425,6 @@ These frameworks require different parsers and different traversal strategies be
 
 ---
 
-# Current Limitations
-
-The analyzer is intentionally deterministic and static.
-
-It builds a compile-time component graph from source code only. It never executes application code or simulates a browser environment.
-
-This is intentional. Reporting every possible collision visible in the source graph is generally more useful than attempting to predict which code paths will execute at runtime.
-
-## No runtime code execution
-
-Application code is never executed.
-
-```tsx
-const value = Math.random() > 0.5;
-
-return value ? <PrimaryButton /> : <SecondaryButton />;
-```
-
-Both `PrimaryButton` and `SecondaryButton` are included in the graph.
-
-Runtime values such as:
-
-- state
-- props
-- `Math.random()`
-- API responses
-
-are ignored.
-
----
-
-## No TypeScript path alias resolution
-
-```ts
-import Button from "@/components/Button";
-```
-
-Only relative imports are currently resolved.
-
----
-
-## No package resolution
-
-```ts
-import React from "react";
-import { Button } from "@company/ui";
-```
-
-Only files within the analyzed repository are included in the component graph.
-
----
-
-## No dynamic imports
-
-```ts
-const Button = await import("./Button");
-```
-
-Dynamic imports are ignored because they cannot be resolved statically.
-
----
-
-## No React.lazy resolution
-
-```tsx
-const LazyButton = React.lazy(() => import("./Button"));
-```
-
-`React.lazy()` boundaries are not currently traversed.
-
----
-
-## No bundler-specific module resolution
-
-The analyzer does not reproduce Webpack, Vite, esbuild, or other bundler behavior.
-
-For example, it does not resolve:
-
-- custom module aliases
-- `package.json` `"exports"` maps
-- workspace-specific module resolution
-
----
-
-## No styling analysis
-
-The analyzer only inspects JSX structure and configured validation attributes.
-
-It does not analyze:
-
-- `className`
-- CSS Modules
-- Tailwind
-- styled-components
-- Emotion
-- runtime styling logic
-
-
-
-
-
-
-
-
-
-
-
 
 ## What makes it react specific?
 It is React-specific because the analyzer is built around React’s programming model, not just generic HTML or TypeScript.
@@ -487,3 +504,179 @@ One nuance:
 - It just will NOT traverse into those tags as if they were components
 
 So the tool checks DOM attributes on the real rendered elements, but only traverses into custom React components.
+
+
+
+# End-to-End Flow
+
+## 1. Configuration
+
+The CLI reads [`src/config.ts`](src/config.ts)
+
+Current configuration:
+
+```ts
+export const config = {
+  repoRoot: path.resolve("../sample-app-for-page-id-check"),
+  pages: ["src/pages/**/*.tsx", "src/screens/**/*.tsx"],
+  exclude: ["**/node_modules/**", "**/*.test.tsx", "**/*.spec.tsx"],
+  duplicateAttributes: ["id", "data-testid"],
+};
+```
+
+Meaning:
+
+- `repoRoot` points at the sample app repository.
+- `pages` defines the page entry-point globs.
+- `exclude` is applied throughout discovery and traversal.
+- `duplicateAttributes` defines which DOM attributes are checked.
+
+## 2. Page discovery
+
+[`src/discover.ts`](src/discover.ts) uses `fast-glob` to find page files under `repoRoot`.
+
+The result is a list of absolute file paths. If nothing matches, the CLI prints a warning and exits with code `0`.
+
+## 3. Render-tree traversal
+
+[`src/buildPageAnalysis.ts`](src/buildPageAnalysis.ts) builds the page scope.
+
+The current traversal is JSX-driven:
+
+1. Parse the page file.
+2. Collect the JSX component usages in that file.
+3. Match those usages to local imports.
+4. Resolve the matching component files.
+5. Follow the component tree recursively.
+6. Repeat the same process for every rendered child component.
+
+Important:
+
+- Only JSX usages that are actually rendered drive traversal.
+- Imported components that are not rendered are ignored.
+- Repeated JSX tags are counted as repeated instances, not collapsed into one.
+
+## 4. Parsing
+
+[`src/parser.ts`](src/parser.ts) reads a single TSX file and extracts:
+
+- JSX attributes
+- import declarations
+- JSX component usages
+
+### Attribute extraction
+
+The parser records:
+
+- file path
+- attribute name
+- attribute value
+- line number
+- column number
+
+It normalizes string-like JSX initializers so duplicate comparison uses the actual value rather than JSX syntax noise.
+
+Example:
+
+```tsx
+<input data-testid={"search-input"} />
+```
+
+is normalized to:
+
+```ts
+search-input
+```
+
+### Component usage extraction
+
+The parser records JSX component tags such as:
+
+```tsx
+<Button />
+<Forms.ProfileForm />
+<Modal.Header />
+```
+
+Those usages are what drive traversal.
+
+### Import extraction
+
+The parser also records import declarations so the traversal can connect component usage back to the actual source file.
+
+## 5. Import resolution
+
+[`src/resolveImport.ts`](src/resolveImport.ts) resolves relative imports only.
+
+It tries common file layouts in this order:
+
+- `./Button.tsx`
+- `./Button.ts`
+- `./Button.jsx`
+- `./Button.js`
+- `./Button/index.tsx`
+- `./Button/index.ts`
+- `./Button/index.jsx`
+- `./Button/index.js`
+
+Examples:
+
+```tsx
+import Button from "./Button";
+```
+
+may resolve to:
+
+```tsx
+Button.tsx
+```
+
+or:
+
+```tsx
+Button/index.tsx
+```
+
+Package imports and TypeScript path aliases are not resolved.
+
+## 6. Barrel resolution
+
+[`src/resolveExport.ts`](src/resolveExport.ts) follows barrel files like:
+
+```ts
+export { Button } from "./Button";
+export { Button, Card } from "./ui";
+export * from "./ui";
+```
+
+This lets the JSX tree traversal move through `index.ts` files and still reach the real component implementation files.
+
+## 7. Validation
+
+[`src/validator.ts`](src/validator.ts) receives the flattened page scope and checks only the configured duplicate attributes.
+
+It:
+
+1. Ignores empty values.
+2. Groups attributes by `name + value`.
+3. Reports a duplicate when the same attribute/value pair appears more than once in the same page scope.
+
+## 8. Output
+
+[`src/index.ts`](src/index.ts) prints the result.
+
+If duplicates are found, it prints:
+
+- page path
+- duplicate attribute name
+- duplicate value
+- every occurrence
+- file path
+- line
+- column
+- render path back to the JSX call site
+
+If nothing is duplicated, the CLI exits with code `0`.
+If duplicates are found, the CLI exits with code `1`.
+
+Repeated renders of the same component show up as separate entries with a different render path instead of three identical source lines.

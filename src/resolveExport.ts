@@ -2,7 +2,7 @@ import fs from "fs";
 import { resolveImport } from "./resolveImport.js";
 import { ReExport } from "./types.js";
 
-/** Extract re-export targets from barrel files. */
+//Extract re-export targets from barrel files.
 export function resolveExports(filePath: string): ReExport[] {
   const content = fs.readFileSync(filePath, "utf-8");
 

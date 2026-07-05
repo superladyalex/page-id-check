@@ -1,7 +1,7 @@
 import path from "path";
 import fs from "fs";
 
-/** Resolve relative imports to source files. */
+// Resolve relative imports to source files.
 export function resolveImport(fromFile: string, module: string): string | null {
   if (!module.startsWith(".")) return null;
 

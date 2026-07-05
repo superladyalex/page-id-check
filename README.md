@@ -2,6 +2,8 @@
 
 `page-id-check` is a static analysis CLI for React/TSX codebases. It starts from configured page entry files, follows the JSX render tree, resolves imported components through relative imports and barrels, and reports duplicate DOM attributes such as `id` and `data-testid`. The analyzer is static only. It does not run the app or simulate runtime rendering.
 
+## Write-up/Answers to questions
+[`writeup`](Writeup.md)
 
 ## Running Locally / Contributing
 

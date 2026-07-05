@@ -1,6 +1,3 @@
-A short write-up. A few paragraphs that cover:
-
-
 # What problem you chose and why it interested you
 
 I come from a heavy testing and statically typed language background. I never understood how, on the for web, you can just freely structure things and end up with duplicates of attributes that are supposed to be unique.
@@ -355,12 +352,17 @@ I think there are a lot of things that could use improvement (see the limitation
 here that I had either tried to get in or really wished I had gotten to.
 
 
-### Absolute paths 
-I tried to trim the paths but loss page data in the process 
+# What I'd Improve with More Time
 
-I ended up with output that looked like this 
-```
+I'm intentionally keeping this section short as there are a number of potential improvements that could be made to the analyzer (many of which are discussed in the limitations section). These are a few that I either started exploring or would prioritize next.
 
+## Cleaner output paths
+
+I wanted the report to display shorter, repository-relative paths instead of absolute filesystem paths.
+
+My first attempt trimmed too much information, producing output like:
+
+```text
 Page: /Users/alexandra/repos/sample-app-for-page-id-check/src/pages/SettingsPage.tsx
 data-testid: "search-input"
 
@@ -368,44 +370,53 @@ data-testid: "search-input"
 2. SearchResults.tsx:15:7 via sample-app-for-page-id-check:35:9
 ```
 
-I tried to change the following and was unsuccessful 
-- `${occurrence.file}` to `{path.basenaame(occurence.file)}`
-- `path.relative` to `path.basename` 
+While this shortened the component file paths, it also removed useful context from the render path, making it difficult to determine where a component was rendered.
 
+I experimented with changes such as:
 
-### Add global caches for file analysis and file resolution
+- replacing `${occurrence.file}` with `path.basename(occurrence.file)`
+- replacing `path.relative(...)` with `path.basename(...)`
 
-Right now:
-* analyzeTsxFile() can rerun for the same file across pages
-* `resolveImport()` repeatedly hits `fs.existsSync`
-* `resolveExportTargets()` rereads files repeatedly
+Neither produced an output format that I was happy with. Given more time, I'd revisit the formatting so the report is concise while still preserving enough context to be useful.
 
-All that can cause major performane problems when dealing with larger/more realistic code bases. 
+---
 
-I think we could do something like this but am not 100% sure and would want more time
+## Add global caches for file analysis and module resolution
+
+Analysis is currently cached within a single page traversal, but not across the entire run.
+
+This means that when multiple pages reference the same components:
+
+- `analyzeTsxFile()` may parse the same file multiple times
+- `resolveImport()` repeatedly performs the same filesystem lookups
+- `resolveExportTargets()` repeatedly reads and parses the same barrel files
+
+For larger repositories, this unnecessary work could become a noticeable performance bottleneck.
+
+One possible approach would be to introduce process-wide caches, for example:
+
 ```typescript
 const fileAnalysisCache = new Map<string, FileAnalysis>();
 const importResolutionCache = new Map<string, string | null>();
 ```
 
-### 
+This would allow parsed files and resolved imports to be reused across page analyses rather than recomputed for each page.
+
+---
+
 
 # Any limitations/rough edges you’re aware of
 
-The analyzer is intentionally deterministic and static. It builds a compile-time component graph from source code only. It never executes application code or simulates a browser environment.
-Reporting every possible collision visible in the source graph is generally more useful than attempting to predict which code paths will execute at runtime.
-Additionally, there are several deliberate scope boundaries and implementation constraints in place. 
-These decisions are made to preserve the deterministic nature of the analyzer and keep the component graph fully static 
-and predictable. The tool is designed to operate only on source code structure, without relying on runtime execution or 
-framework-specific behavior. As a result, certain advanced or dynamic language features are intentionally out of scope. 
-This includes full TypeScript module resolution, bundler-specific aliasing, and complex package-based dependency graphs.
-Similarly, export resolution is simplified and does not aim to fully replicate TypeScript or Node module semantics. 
-Some patterns, such as advanced barrel export structures or unconventional re-export chains, are only partially supported. 
-These trade-offs reduce complexity and improve consistency, but introduce known limitations in edge-case scenarios. 
-Other constraints are a result of implementation scope and performance considerations rather than explicit design choices.
-A more comprehensive list is listed below. 
+The analyzer is intentionally deterministic and static. It builds a compile-time component graph directly from source code and never executes application code or simulates a runtime environment.
 
-## No runtime code execution
+This approach favors predictability and repeatability over runtime accuracy. Rather than attempting to determine which code paths will execute, the analyzer reports every potential duplicate visible in the static component graph.
+
+To keep the implementation focused and deterministic, several features are intentionally out of scope. Others reflect implementation trade-offs made to balance complexity, correctness, and development time. The known limitations are outlined below.
+
+
+## Runtime Semantics
+
+### No runtime code execution
 
 Application code is never executed.
 
@@ -428,7 +439,46 @@ are ignored.
 
 ---
 
-## No TypeScript path alias resolution
+### Limited support of React framework semantics
+
+While the analyzer is designed around React-style JSX, it does not fully implement React’s runtime behavior.
+
+Specifically, it does not model:
+
+hooks (useState, useEffect, etc.)
+context propagation
+memoization (React.memo)
+reconciliation behavior
+component lifecycle
+
+It only models component composition as expressed in source code.
+
+---
+
+### No dynamic imports
+
+```ts
+const Button = await import("./Button");
+```
+
+Dynamic imports are ignored because they cannot be resolved statically.
+
+---
+
+### No React.lazy resolution
+
+```tsx
+const LazyButton = React.lazy(() => import("./Button"));
+```
+
+`React.lazy()` boundaries are not currently traversed.
+
+---
+
+## Module Resolution
+
+
+### No TypeScript path alias resolution
 
 ```ts
 import Button from "@/components/Button";
@@ -450,46 +500,67 @@ Only files within the analyzed repository are included in the component graph.
 
 ---
 
-## No dynamic imports
+### Barrel export resolution is regex-based
 
-```ts
-const Button = await import("./Button");
+Barrel resolution (`resolveExport.ts`) uses regex parsing instead of AST analysis:
+
+```typescript
+export { Button } from "./Button";
+export * from "./ui";
 ```
 
-Dynamic imports are ignored because they cannot be resolved statically.
+This works for simple cases, but breaks with:
+* multiline exports
+* aliased exports (as)
+* formatted exports across lines
+* commented or generated exports
+
+Export resolution is not structurally aware, meaning correctness depends on formatting rather than syntax validity.
 
 ---
 
-## No React.lazy resolution
+## JSX Analysis
+
+### Limited evaluation of JSX expressions
+
+Only string-like JSX attribute values are normalized.
+
+For example:
 
 ```tsx
-const LazyButton = React.lazy(() => import("./Button"));
+id="button"
+id={"button"}
 ```
+are treated identically.
 
-`React.lazy()` boundaries are not currently traversed.
+More complex expressions such as
+```typescript
+id={buttonId}
+id={getButtonId()}
+```
+are recorded as their source expressions rather than evaluated.
+
+This preserves deterministic static analysis but means runtime-computed values cannot be compared accurately.
 
 ---
 
-## Limited support of React framework semantics
+### No support for JSX spread attributtes
+```typescript
+<div {...props} />
+```
+Spread attributes are not expanded or resolved.
 
-While the analyzer is designed around React-style JSX, it does not fully implement React’s runtime behavior.
+Any duplicate attribute passed via props spreading is invisible to the analyzer, which may result in under-reporting of duplicates in real-world component patterns.
 
-Specifically, it does not model:
+---
 
-hooks (useState, useEffect, etc.)
-context propagation
-memoization (React.memo)
-reconciliation behavior
-component lifecycle
+## Performance
 
-It only models component composition as expressed in source code.
+### No shared analysis cache across pages
 
---- 
+Each page builds its analysis independently. If multiple pages render the same component, that component is parsed and resolved repeatedly.
 
-## No unified caching layer across pages (FILE/AST LEVEL)
-Each page builds its own analysis context independently. While FileAnalysis is cached within a single page traversal, it is not shared across page analyses.
-This leads to repeated work when multiple pages import the same components.
-
+For example:
 ```
 LoginPage    → Button.tsx parsed and resolved
 SettingsPage → Button.tsx parsed and resolved again
@@ -510,7 +581,7 @@ This affects:
 
 ---
 
-## No deduplication of traversal paths
+### No deduplication of traversal paths
 
 Within a single page traversal, identical component subtrees can be visited multiple times when reached through different JSX usage points.
 Because traversal is recursive and path-driven (`buildPageAnalysis.ts`), the same component graph can be expanded repeatedly.
@@ -526,38 +597,14 @@ Even if file-level analysis is cached, the traversal still re-enters the same co
 This affects:
 * performance (repeated AST + import work)
 * determinism of traversal cost (not result correctness)
----
 
-## Barrel export resolution is regex-based (fragile)
-
-Barrel resolution (`resolveExport.ts`) uses regex parsing instead of AST analysis:
-
-```typescript
-export { Button } from "./Button";
-export * from "./ui";
-```
-
-This works for simple cases, but breaks with:
-* multiline exports
-* aliased exports (as)
-* formatted exports across lines
-* commented or generated exports
-
-Export resolution is not structurally aware, meaning correctness depends on formatting rather than syntax validity.
+This is intentional for correctness—the analyzer needs to count multiple rendered instances—but portions of the traversal work could potentially be memoized to improve performance.
 
 ---
 
-## No support for JSX spread attributtes
-```typescript
-<div {...props} />
-```
-Spread attributes are not expanded or resolved.
+## Styling
 
-Any duplicate attribute passed via props spreading is invisible to the analyzer, which may result in under-reporting of duplicates in real-world component patterns.
-
----
-
-## No styling analysis
+### No Style Analysis
 
 The analyzer only inspects JSX structure and configured validation attributes.
 
@@ -570,4 +617,26 @@ It does not analyze:
 - Emotion
 - runtime styling logic
 
+--- 
+
+## Design Decisions
+
+### Component detection follows JSX naming conventions
+
+Traversal follows React's standard PascalCase convention.
+```tsx
+<Button />
+<Modal.Header />
+```
+are treated as traversable components, while lowercase elements such as:
+```typescript
+<div />
+<input />
+<button />
+```
+are treated as terminal DOM nodes.
+
+This matches common React conventions but assumes component naming follows standard JSX practices.
+
+---
 

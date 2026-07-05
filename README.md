@@ -558,7 +558,7 @@ If no files match, the CLI exits successfully with a warning.
 
 The result is a list of absolute file paths. If nothing matches, the CLI prints a warning and exits with code `0`.
 
-## 4. Building hte page scope (core traversal)
+## 4. Building the page scope (core traversal)
 
 This is the most important step
 [`src/buildPageAnalysis.ts`](src/buildPageAnalysis.ts) builds the page scope.
@@ -583,11 +583,9 @@ Important:
 
 [`src/parser.ts`](src/parser.ts) reads a single TSX file and extracts:
 
-- JSX attributes
-- import declarations
-- JSX component usages
+### JSX Attribute extraction
+Only attributes listed in `duplicateAttributes` are tracked. Values are normalized so that equivalent syntax produces the same value
 
-### Attribute extraction
 
 The parser records:
 
@@ -611,7 +609,7 @@ is normalized to:
 search-input
 ```
 
-### Component usage extraction
+### Component usage 
 
 The parser records JSX component tags such as:
 
@@ -621,15 +619,15 @@ The parser records JSX component tags such as:
 <Modal.Header />
 ```
 
-Those usages are what drive traversal.
+Those usages are what drive traversal. Lowercase HTML elements like `<div>` or `<input>` are treated as DOM nodes and are not traversed as components.
 
 ### Import extraction
 
 The parser also records import declarations so the traversal can connect component usage back to the actual source file.
 
-## 5. Import resolution
+## 6. Import resolution
 
-[`src/resolveImport.ts`](src/resolveImport.ts) resolves relative imports only.
+[`src/resolveImport.ts`](src/resolveImport.ts) resolves **relative** imports only.
 
 It tries common file layouts in this order:
 
@@ -660,9 +658,9 @@ or:
 Button/index.tsx
 ```
 
-Package imports and TypeScript path aliases are not resolved.
+Package imports and TypeScript path aliases are **NOT** resolved.
 
-## 6. Barrel resolution
+## 7. Barrel resolution
 
 [`src/resolveExport.ts`](src/resolveExport.ts) follows barrel files like:
 
@@ -672,17 +670,25 @@ export { Button, Card } from "./ui";
 export * from "./ui";
 ```
 
-This lets the JSX tree traversal move through `index.ts` files and still reach the real component implementation files.
+This lets the traversal move through `index.ts` files and still reach the real component implementation files.
 
-## 7. Validation
+The resolver supports:
+* named re-exports
+* wildcard exports (`export * from`)
+
+More complex export patterns are simplified to maintain deterministic behavior.
+
+
+## 8. Validation
 
 [`src/validator.ts`](src/validator.ts) receives the flattened page scope and checks only the configured duplicate attributes.
 
 It:
 
-1. Ignores empty values.
-2. Groups attributes by `name + value`.
-3. Reports a duplicate when the same attribute/value pair appears more than once in the same page scope.
+1. Filters only configured `duplicateAttributes`
+2. Ignores empty values. 
+3. Groups attributes by `name + value`. 
+4. Reports a duplicate when the same attribute/value pair appears more than once in the same page scope.
 
 ## 8. Output
 

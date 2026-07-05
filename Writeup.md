@@ -105,7 +105,11 @@ The main benefit was that each test now owns its own mini project and its own co
 failure is usually local to one concern, and the suite no longer depends on the sample app for basic
 correctness checks.
 
-The sample app is still useful as a demonstration of the real analyzer behavior, but the tests themselves
+We also removed hidden config fallback from the helper functions, so the tests pass their own roots,
+ignore lists, and duplicate-attribute settings explicitly. That made the suite genuinely self-contained
+and kept the test behavior independent from the repo’s live configuration.
+
+The sample apps are still useful as a demonstration of the real analyzer behavior, but the tests themselves
 now stay deterministic and isolated.
 
 ## Outcome
@@ -143,6 +147,19 @@ That caused two related problems:
 
 - imported-but-unused components were pulled into the analysis
 - the same file could be traversed multiple times through different import shapes
+
+Example:
+
+```tsx
+import SearchBox from "../components/ui/SearchBox";
+import SearchResults from "../components/ui/SearchResults";
+
+export default function ImportedButUnusedPage() {
+  return <SearchBox />;
+}
+```
+
+If traversal is driven by imports alone, both `SearchBox` and `SearchResults` look relevant. In reality, only `SearchBox` is rendered here. `SearchResults` should be ignored because it never appears in the JSX tree.
 
 Before:
 ```typescript
@@ -214,6 +231,15 @@ function getValue(initializer: any) {
 
 That led to duplicate reports that looked different even when they represented the same value.
 
+Example:
+
+```tsx
+<input data-testid={"search-input"} />
+<input data-testid="search-input" />
+```
+
+Without normalization, those can be treated as different syntax shapes even though the underlying attribute value is the same.
+
 After ([src/parser.ts]):
 ```typescript
 function normalizeAttributeValue(initializer: any): string | null {
@@ -252,6 +278,7 @@ function normalizeAttributeValue(initializer: any): string | null {
 ```
 
 That normalization made duplicate detection and output much more stable.
+It ensures that string literals, template literals, and JSX expression wrappers all collapse to the same comparison value when they represent the same DOM attribute.
 
 ## The report needed more provenance
 

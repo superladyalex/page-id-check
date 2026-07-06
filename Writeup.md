@@ -112,16 +112,6 @@ and kept the test behavior independent from the repo’s live configuration.
 The sample apps are still useful as a demonstration of the real analyzer behavior, but the tests themselves
 now stay deterministic and isolated.
 
-## Outcome
-
-Despite these areas of miscommunication, the collaboration was productive. We were able to:
-
-- converge on a stable and deterministic traversal model
-- build representative sample applications covering key edge cases
-- refine the analyzer to correctly identify intended duplicate attribute scenarios
-- improve clarity and structure of output reporting
-
-Overall, the process helped progressively clarify the design boundaries and led to a more robust and predictable system.
 
 
 # Where the AI got things wrong and how you dealt with it

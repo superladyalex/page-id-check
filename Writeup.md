@@ -44,56 +44,30 @@ This model fits React and other JSX-based frameworks like React. It is not a goo
 
 # How you used AI and what worked or didn’t
 
-I used Codex throughout the development process. Overall, it was helpful in accelerating implementation, but there were several areas where we had misalignment that required iteration and clarification.
-I also used Codex to refine the documentation and to review my work, helping identify assumptions that were worth revisiting.
+I used Codex throughout the development process. It helped speed up implementation, and it was also useful for reviewing design choices and documentation.
 
+What worked well was using it to iterate on the analyzer structure and the writeup at the same time:
 
-## Areas of miscommunication
+- it helped surface assumptions that were worth revisiting
+- it sped up early implementation of the parser, resolver, and traversal pieces
+- it helped tighten the docs when the code and the explanation drifted apart
 
-One key challenge was around scope and framework coupling. There was initial ambiguity about how tightly the analyzer 
-should be tied to a specific framework versus remaining framework-agnostic. This led to back-and-forth adjustments in design
-decisions.
-
-
-We also had repeated misalignment around *how page traversal should work and what should be considered part of a “page graph.”
-In particular, there was confusion around:
+The main friction was around scope and traversal rules. We had to clarify several times what belonged in the page graph and what did not:
 
 - whether unused imports should be traversed
 - how conditional JSX should be interpreted
 - whether traversal should follow full import graphs or strictly JSX render trees
+- how barrel files should be handled when they re-export multiple modules
 
-These decisions significantly affected the correctness of the analyzer’s output.
+That mattered because the traversal model directly affected correctness. Once that was settled, the implementation became much more predictable.
 
-Another area of divergence was barrel file handling. We iterated between:
-
-- traversing all exported modules from barrel files
-- versus only traversing components that are actually reached through JSX usage
-
-This had a major impact on traversal correctness and performance.
-
-## Output format evolution
-
-We also iterated multiple times on output structure and formatting. Early versions of the analyzer produced less structured and harder-to-interpret outputs. Over time, we refined the format to include:
-
-- clearer duplicate grouping
-- improved traceability through render paths
-- more consistent representation of occurrences
-
-## Testing approach
-
-There was also initial misalignment around testing strategy. I intended for the test suite to be made of
-small, deterministic unit tests, but at first we leaned too heavily on the sample application as the source
-of truth.
-
-That worked for demonstrating the analyzer end-to-end, but it made the tests more coupled than necessary:
+Testing was another place where the collaboration improved over time. At first, the suite leaned too heavily on the sample application as the source of truth. That was useful for demonstrating the analyzer end to end, but it made the tests more coupled than they needed to be:
 
 - they depended on a sibling repository being present in a specific path
 - they relied on shared repo config instead of explicit test inputs
-- they made it harder to reason about whether a failure came from traversal, validation, or fixture setup
+- they made failures harder to localize
 
-We corrected that by moving the tests to temporary, self-contained fixtures.
-
-That split the suite into focused unit-level coverage:
+We corrected that by moving the tests to temporary, self-contained fixtures. That split the suite into focused unit-level coverage:
 
 - parser tests for JSX normalization and component usage detection
 - resolver tests for relative imports and barrel exports
@@ -101,16 +75,7 @@ That split the suite into focused unit-level coverage:
 - validator tests for duplicate grouping and empty-value handling
 - formatter tests for report output
 
-The main benefit was that each test now owns its own mini project and its own config inputs. That means a
-failure is usually local to one concern, and the suite no longer depends on the sample app for basic
-correctness checks.
-
-We also removed hidden config fallback from the helper functions, so the tests pass their own roots,
-ignore lists, and duplicate-attribute settings explicitly. That made the suite genuinely self-contained
-and kept the test behavior independent from the repo’s live configuration.
-
-The sample apps are still useful as a demonstration of the real analyzer behavior, but the tests themselves
-now stay deterministic and isolated.
+The net result was better isolation: each test now owns its own mini project and config inputs, so failures tend to point at one concern instead of several at once. The sample apps still matter as real examples, but the unit tests themselves are now deterministic and independent from the repo’s live configuration.
 
 
 

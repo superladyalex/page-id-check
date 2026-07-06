@@ -462,31 +462,6 @@ To keep the implementation focused and deterministic, several features are inten
 The analyzer fits React and other JSX-based frameworks best. It is not a good fit for template-driven frameworks like Vue, Svelte, or Angular without a different parser and traversal model.
 
 
-## Runtime Semantics
-
-### No runtime code execution
-
-Application code is never executed.
-
-```tsx
-const value = Math.random() > 0.5;
-
-return value ? <PrimaryButton /> : <SecondaryButton />;
-```
-
-Both `PrimaryButton` and `SecondaryButton` are included in the graph.
-
-Runtime values such as:
-
-- state
-- props
-- `Math.random()`
-- API responses
-
-are ignored.
-
----
-
 ### Limited support of React framework semantics
 
 While the analyzer is designed around React-style JSX, it does not fully implement React’s runtime behavior.
@@ -678,6 +653,29 @@ It does not analyze:
 --- 
 
 ## Design Decisions
+
+### No runtime code execution
+
+The analyzer is static only. It builds a compile-time component graph directly from source code and never executes application code or simulates a runtime environment.
+
+```tsx
+const value = Math.random() > 0.5;
+
+return value ? <PrimaryButton /> : <SecondaryButton />;
+```
+
+Both `PrimaryButton` and `SecondaryButton` are included in the graph.
+
+Runtime values such as:
+
+- state
+- props
+- `Math.random()`
+- API responses
+
+are ignored.
+
+This is intentional: it favors predictability and repeatability over runtime accuracy. Rather than attempting to determine which code paths will actually execute, the analyzer reports every potential duplicate visible in the static component graph.
 
 ### Component detection follows JSX naming conventions
 

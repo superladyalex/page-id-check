@@ -50,12 +50,12 @@ I also used Codex to refine the documentation and to review my work, helping ide
 
 ## Areas of miscommunication
 
-One key challenge was around **scope and framework coupling**. There was initial ambiguity about how tightly the analyzer 
+One key challenge was around scope and framework coupling. There was initial ambiguity about how tightly the analyzer 
 should be tied to a specific framework versus remaining framework-agnostic. This led to back-and-forth adjustments in design
 decisions.
 
 
-We also had repeated misalignment around **how page traversal should work** and what should be considered part of a “page graph.”
+We also had repeated misalignment around *how page traversal should work and what should be considered part of a “page graph.”
 In particular, there was confusion around:
 
 - whether unused imports should be traversed
@@ -64,7 +64,7 @@ In particular, there was confusion around:
 
 These decisions significantly affected the correctness of the analyzer’s output.
 
-Another area of divergence was **barrel file handling**. We iterated between:
+Another area of divergence was barrel file handling. We iterated between:
 
 - traversing all exported modules from barrel files
 - versus only traversing components that are actually reached through JSX usage
@@ -73,7 +73,7 @@ This had a major impact on traversal correctness and performance.
 
 ## Output format evolution
 
-We also iterated multiple times on **output structure and formatting**. Early versions of the analyzer produced less structured and harder-to-interpret outputs. Over time, we refined the format to include:
+We also iterated multiple times on output structure and formatting. Early versions of the analyzer produced less structured and harder-to-interpret outputs. Over time, we refined the format to include:
 
 - clearer duplicate grouping
 - improved traceability through render paths
@@ -395,7 +395,7 @@ data-testid: "search-input"
 
 While this shortened the component file paths, it also removed useful context from the render path, making it difficult to determine where a component was rendered.
 
-I experimented with changes such as:
+I experimented with changes:
 
 - replacing `${occurrence.file}` with `path.basename(occurrence.file)`
 - replacing `path.relative(...)` with `path.basename(...)`
@@ -420,7 +420,31 @@ The implementation would likely be straightforward because the CLI already exits
 - documenting a simple workflow file
 - making the output concise enough for CI logs
 
-That would turn the analyzer from a local developer tool into something that fits naturally into a code review pipeline.
+## Add a cleaner test seam for the CLI
+
+I would also separate the CLI orchestration from the file analysis logic a bit more.
+
+Right now, the core analyzer pieces are easy to unit test because they take explicit inputs and return values. The CLI entrypoint is less clean because it:
+
+- reads shared config directly
+- prints to stdout
+- exits the process
+
+That makes `main()` harder to test unit test style because a test would need to intercept console output and stop the process from exiting. If I were extending this further, I would split the code into two layers:
+
+- a small CLI wrapper that reads `config` and calls `process.exit()`
+- a pure `runAnalyzer(config, writeOutput)` style function that returns a result object instead of exiting
+
+Something like this 
+
+```typescript
+async function main() {
+  const result = await runAnalyzer(config, console.log);
+  process.exit(result.exitCode);
+}
+```
+
+In that setup, I would not focus unit tests on `main()` minus a small wiring check. The main tests would target `runAnalyzer(...)` directly, because that is where the real behavior lives. Those tests could assert on the returned status, captured output, and any reported issues without needing to stub global process behavior. The wrapper would stay tiny, and the rest of the CLI logic would become testable with the same self-contained unit-test style used elsewhere in the repo.
 
 ---
 

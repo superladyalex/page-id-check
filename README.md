@@ -7,7 +7,7 @@ See [Writeup.md](Writeup.md) for the analyzer design, React-specific behavior, a
 
 
 ## Other repos you will need
-This app can run against 2 sibling test apps. You can clone them as siblings to this repo -- additional information is below on how to configure the `.config` and where the repos are located.
+This app can run against 2 sibling test apps. You can clone them as siblings to this repo -- additional information is below on how to configure the `/src/.config` and where the repos are located.
 
 ## Running Locally / Contributing
 

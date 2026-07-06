@@ -223,6 +223,66 @@ export default function BranchDuplicatePage() {
   ]);
 });
 
+test("buildPageAnalysis stops on circular component imports", () => {
+  const root = createTempProject({
+    "src/pages/CyclePage.tsx": `import ComponentA from "../components/ComponentA";
+
+export default function CyclePage() {
+  return <ComponentA />;
+}
+`,
+    "src/components/ComponentA.tsx": `import ComponentB from "./ComponentB";
+
+export default function ComponentA() {
+  return <ComponentB />;
+}
+`,
+    "src/components/ComponentB.tsx": `import ComponentA from "./ComponentA";
+
+export default function ComponentB() {
+  return <button id="cycle-button" data-testid="cycle-button" />;
+}
+`,
+  });
+
+  const analysis = buildPageAnalysis(
+    fixturePath(root, "src/pages/CyclePage.tsx"),
+    root,
+    TEST_EXCLUDE
+  );
+
+  const idAttr = analysis.attributes.find(
+    (attr) => attr.name === "id" && attr.value === "cycle-button"
+  );
+
+  assert.equal(idAttr?.renderPath.length, 2);
+  assert.equal(idAttr?.renderPath[0]?.name, "ComponentA");
+  assert.equal(idAttr?.renderPath[1]?.name, "ComponentB");
+});
+
+test("resolveExportTargets handles circular barrel chains", () => {
+  const root = createTempProject({
+    "src/components/ui/index.ts": `export * from "./more";
+`,
+    "src/components/ui/more.ts": `export * from "./index";
+export { Button } from "./Button";
+`,
+    "src/components/ui/Button.tsx": `export default function Button() {
+  return null;
+}
+`,
+  });
+
+  const targets = resolveExportTargets(
+    fixturePath(root, "src/components/ui/index.ts"),
+    "Button"
+  );
+
+  assert.ok(targets.includes(fixturePath(root, "src/components/ui/Button.tsx")));
+  assert.ok(targets.includes(fixturePath(root, "src/components/ui/index.ts")));
+  assert.equal(new Set(targets).size, targets.length);
+});
+
 test("formatRenderPath shortens a render path to relative file segments", () => {
   const output = formatRenderPath(
     [

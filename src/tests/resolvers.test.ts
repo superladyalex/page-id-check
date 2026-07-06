@@ -66,3 +66,19 @@ export { SearchResults } from "./SearchResults";
     fixturePath(root, "src/components/ui/SearchResults.tsx"),
   ]);
 });
+
+test("resolveExportTargets resolves aliased barrel exports", () => {
+  const root = createTempProject({
+    "src/components/ui/index.ts": `export { Button as PrimaryButton } from "./Button";
+`,
+    "src/components/ui/Button.tsx": "export default function Button() { return null; }\n",
+  });
+
+  assert.deepEqual(
+    resolveExportTargets(
+      fixturePath(root, "src/components/ui/index.ts"),
+      "PrimaryButton"
+    ),
+    [fixturePath(root, "src/components/ui/Button.tsx")]
+  );
+});

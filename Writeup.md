@@ -301,7 +301,7 @@ data-testid: "conditional-action"
 2. /Users/alexandra/repos/sample-app-for-page-id-check/src/components/ui/ConditionalSecondaryButton.tsx:8:37
 ```
 
-This told you which files had the duplicate, but not which branch or render site pulled them in.
+This told you which files had the duplicate, but not the origination of them.
 
 After ([src/validator.ts]):
 ```typescript

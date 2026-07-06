@@ -404,22 +404,6 @@ Neither produced an output format that I was happy with. Given more time, I'd re
 
 ---
 
-## Turn it into a GitHub Action
-
-I would also consider packaging the analyzer as a GitHub Action so it can run automatically in CI.
-
-That would make the tool easier to adopt because teams could:
-
-- run it on pull requests
-- fail the check when duplicates are introduced
-- annotate the changed files directly in the review
-
-The implementation would likely be straightforward because the CLI already exits with a success/failure code. The main work would be:
-
-- accepting repository configuration through inputs or env vars
-- documenting a simple workflow file
-- making the output concise enough for CI logs
-
 ## Add a cleaner test seam for the CLI
 
 I would also separate the CLI orchestration from the file analysis logic a bit more.
@@ -435,7 +419,7 @@ That makes `main()` harder to test unit test style because a test would need to 
 - a small CLI wrapper that reads `config` and calls `process.exit()`
 - a pure `runAnalyzer(config, writeOutput)` style function that returns a result object instead of exiting
 
-Something like this 
+Something like this
 
 ```typescript
 async function main() {
@@ -448,7 +432,21 @@ In that setup, I would not focus unit tests on `main()` minus a small wiring che
 
 ---
 
-## Run tests and publish artifacts in CI
+## Turn it into a GitHub Action
+
+I would also consider packaging the analyzer as a GitHub Action so it can run automatically in CI.
+
+That would make the tool easier to adopt because teams could run it on pull requests, pushes etc
+
+The implementation would likely be straightforward because the CLI already exits with a success/failure code. The main work would be:
+
+- accepting repository configuration through inputs or env vars
+- documenting a simple workflow file
+- making the output concise enough for CI logs
+
+---
+
+## Run tests and publish artifacts in CI (Production-ization steps)
 
 I would also set up CI to build, test, and publish artifacts from the analyzer.
 
@@ -457,14 +455,6 @@ The basic flow would be:
 - run the unit test suite on every pull request
 - build the CLI on merge to main or on release tags
 - upload the built output as a CI artifact or publish it to an artifact repository
-
-That would make it easier to:
-
-- verify the analyzer stays healthy over time
-- keep a reproducible build artifact around for release or debugging
-- avoid relying on a local checkout when someone wants to inspect a specific build
-
-If I had more time, I would probably pair this with a small release workflow so tagged versions of the CLI could be distributed in a predictable way.
 
 ---
 

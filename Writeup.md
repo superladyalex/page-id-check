@@ -2,7 +2,7 @@
 
 I come from a heavy testing and statically typed language background. I never understood how, on the for web, you can just freely structure things and end up with duplicates of attributes that are supposed to be unique.
 
-Given how important certain attributes are—and how many systems assume uniqueness—I never understood how you were just “allowed” to have multiple of the same ones.
+Given how important certain attributes are, and how many systems assume uniqueness, I never understood how you were just “allowed” to have multiple of the same ones.
 
 When you start writing tests or working on accessibility features, you quickly run into the problems this causes. Duplicates break assumptions that other parts of the system rely on.
 

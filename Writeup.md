@@ -360,7 +360,6 @@ There were also a few smaller cleanups that reduced noise:
 - duplicate attribute names were made injectable instead of being hardcoded into validation
 - discovery and exclusion logic were parameterized so tests could supply their own roots and ignore lists
 - unnecessary wrapper abstractions were removed when they added no behavior
-- some traversal and output helpers were simplified once the new structure was stable
 
 Those changes were less dramatic than the traversal and reporting fixes, but they helped keep the codebase easier to reason about.
 

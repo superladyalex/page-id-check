@@ -677,6 +677,8 @@ are ignored.
 
 This is intentional: it favors predictability and repeatability over runtime accuracy. Rather than attempting to determine which code paths will actually execute, the analyzer reports every potential duplicate visible in the static component graph.
 
+--- 
+
 ### Component detection follows JSX naming conventions
 
 Traversal follows React's standard PascalCase convention.
